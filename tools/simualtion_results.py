@@ -39,6 +39,8 @@ class Results:
     _predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
 
     _calculation_time: List[float]
+    _opt_value_list: List[float]
+    _sigma_value_list: List[np.ndarray]
 
     # default styles of plotting
     trajecory_style: Dict = dict(color='tab:blue', linewidth=2, linestyle='-')
@@ -69,6 +71,8 @@ class Results:
         self._predicted_error_trajectory_slices = []
 
         self._calculation_time = []
+        self._opt_value_list = []
+        self._sigma_value_list = []
 
     def add_point(self, input_obj: np.ndarray, input_applied: np.ndarray,
                   global_state: np.ndarray, global_noise: np.ndarray,
@@ -107,6 +111,18 @@ class Results:
         mean_calculation_time = np.mean(self._calculation_time)
         self.mean_calculation_time = mean_calculation_time
         return mean_calculation_time
+    
+    def add_opt_value(self, opt_value: float) -> None:
+        self._opt_value_list.append(opt_value)
+    
+    def add_sigma_value(self, sigma_value: float) -> None:
+        self._sigma_value_list.append(sigma_value)
+    
+    def calculate_sigma_infty_value(self) -> Tuple[float, float]:
+        """Returns the minimum and maximum sigma_infty norm
+        """
+        self.sigma_infty_list = [np.linalg.norm(sigma, np.inf) for sigma in self._sigma_value_list]
+        return min(self.sigma_infty_list), max(self.sigma_infty_list)
 
     def calculate_intervention(self) -> np.ndarray:
         """Calculate the root mean square intervention

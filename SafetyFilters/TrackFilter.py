@@ -5,6 +5,7 @@ from tools.track_functions import demo_track
 from SafetyFilters.DDSF import DDSafetyFilter
 from IOData.IODataWith_l import IODataWith_l
 from System.ErrorKinematicAcceLATI import LinearizedErrorKinematicAcceModel
+from simulators.simulation_settings import SafetyFilterTypes
 
 import math
 import numpy as np
@@ -76,6 +77,7 @@ class SafetyFilterForTrack:
             warn('Vehicle is not in any segment of the track!')
         
         self._previous_traj = []
+        self.first_filtering = True
 
     def add_point(self, u: np.matrix, global_state: np.ndarray) -> None:
         '''
@@ -91,8 +93,11 @@ class SafetyFilterForTrack:
         use pre-stored global trajectory as initial condition
         '''
         # get current segment index, based on last point of global trajectory
-        self.update_index(self._previous_traj[-1][1], self._slack)
+        segment_changed = self.update_index(self._previous_traj[-1][1], self._slack)
         safety_filter = self._safety_filters[self._i]
+        if self.first_filtering:
+            segment_changed = True
+            self.first_filtering = False
         system = self._systems[self._i]
 
         if len(self._previous_traj) < safety_filter._lag:
@@ -107,18 +112,20 @@ class SafetyFilterForTrack:
             us = np.vstack((self._previous_traj[-i][0], us))
             t_lag = (safety_filter._lag+1)*system.kinematic_model.Ts
             # set proper round to get proper initial l value
-            system.set_kinematic_model_state(self._previous_traj[-i][1], round=-t_lag*(system._v_0+system.b_u[0,0]*t_lag))
+            a_max = system.a_max
+            system.set_kinematic_model_state(self._previous_traj[-i][1], round=-t_lag*(system._v_0+a_max*t_lag))
             error_state_no_v0 = system.state - np.array([0,0,system._v_0,0])
             ys = np.vstack((np.matrix(error_state_no_v0[0:3]).transpose(),
                             ys))
         xi_t = np.vstack((us, ys))
         self._previous_traj = [] # clear the global trajectory
-        return safety_filter.filter(xi_t, u_obj)
+        return safety_filter.filter(xi_t, u_obj, segment_changed)
     
-    def update_index(self, global_state: np.ndarray, slack: float) -> None:
+    def update_index(self, global_state: np.ndarray, slack: float) -> bool:
         """Update index of segment based on given global state
         :param global_state: [x_p, y_p, Psi, v]
         :param slack: parameter to make segments "extend beyond beginning"
+        return True if segment changed
         """
         self._systems[self._i].set_kinematic_model_state(global_state, round=-2*slack)
         l = self._systems[self._i].state[3] # error state: [e_lat, mu, v, l]
@@ -127,11 +134,14 @@ class SafetyFilterForTrack:
             if self._i >= len(self._track_generator.chainOfSegments):
                 self._i = 0
             print(f"vehicle moved to segment {self._i}!")
+            return True
         elif l < -slack:
             self._i = self._i - 1
             if self._i < 0:
                 self._i = len(self._track_generator.chainOfSegments)-1
             print(f"vehicle traveld to previous segment {self._i}!")
+            return True
+        return False
 
     @staticmethod
     def contains(segment: Union[line, arc], p:np.ndarray, t: float, slack: float) -> bool:

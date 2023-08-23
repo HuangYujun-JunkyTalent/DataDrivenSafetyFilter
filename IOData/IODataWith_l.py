@@ -85,7 +85,10 @@ class IODataWith_l(IOData):
                 u = self.get_input(i, sys, input_rule)
                 l_data.append(np.matrix( sys.state[-1] + self._n_l*(-1+2*npr.rand(1, 1)) ))
                 y, n = sys.step(u)
-                self.add_point(u, y, n)
+                # append the 
+                self._input_data.append(u)
+                self._output_data.append(y)
+                self._noise_data.append(n)
             self._m = sys.m
             self._p = sys.p
 
@@ -115,7 +118,7 @@ class IODataWith_l(IOData):
             self._p = 3
         self.add_point(u, np.matrix(error_state[0:3]).transpose(), np.matrix(np.zeros( (3,1) )))
         self.add_l_point(np.matrix(error_state[3]))
-        self._length += 1
+        # self._length += 1
     
     def remove_last_point(self) -> bool:
         """Remove the oldest datapoint
@@ -126,7 +129,10 @@ class IODataWith_l(IOData):
         self._input_data.pop(0)
         self._output_data.pop(0)
         self._noise_data.pop(0)
-        self._l_data.pop(0)
+        try:
+            self._l_data.pop(0)
+        except IndexError:
+            print("This Dataset has no data for l, not poping anything.")
         self._length -= 1
         return True
     

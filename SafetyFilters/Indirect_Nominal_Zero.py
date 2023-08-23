@@ -185,7 +185,7 @@ class IndirectNominalZeroFilter(DDSafetyFilter):
 
         self._opt_prob = cp.Problem(cp.Minimize(obj), constraints=constraints)
 
-    def filter(self, xi_t: np.matrix, u_obj: np.matrix) -> Tuple[np.matrix, str, float]:
+    def filter(self, xi_t: np.matrix, u_obj: np.matrix, *args) -> Tuple[np.matrix, str, float]:
         """Return tuple of (filtered control input, status, optimal value)"""
         self._xi_t.value = np.array(xi_t.flat)
         self._u_obj.value = np.array(u_obj.flat)

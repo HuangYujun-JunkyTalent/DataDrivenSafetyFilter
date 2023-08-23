@@ -10,14 +10,15 @@ from itertools import accumulate
 from warnings import warn
 
 from .DDSF import DDSafetyFilter, SFParams
-from IOData import IOData, HankelMatrix
+from IOData.IOData import IOData, HankelMatrix
+from IOData.IODataWith_l import IODataWith_l
 from System.LATI import LATI
 from System.ErrorKinematicAcceLATI import LinearizedErrorKinematicAcceModel
 
 # define the new version with fewer slack variables
 # Robust SF with fewer slack variables
 @dataclass
-class IndirectNominalZeroVParams:
+class IndirectNominalFixMuAddDataLateralParams:
     L: int
     lag: int # approximation of lag of system
     R: np.matrix
@@ -31,20 +32,23 @@ class IndirectNominalZeroVParams:
     # use_estimated_c_pe: bool = False
 
 
-class IndirectNominalZeroVFilter(DDSafetyFilter):
+class IndirectNominalFixMuAddDataLateralFilter(DDSafetyFilter):
     #  use fewer slack variables to compensate noise, slack for initial outputs are omitted
     _y: cp.Variable # output variable
     # _alpha: cp.Variable # slack variables
     _sigma: cp.Variable # slack variables for compensating noise
     _lam_alph: float # regulizing term for alpha
     _lam_sig: float # regulizing term for sigma
-    _io_data: IOData
+    _io_data_list: List[IODataWith_l] # list of data trajectories
     _epsilon: float # noise level
     _R: np.matrix
     _c_sum: List[List[float]] # tightening constants
 
     _u_s: np.ndarray # steasy state input
     _y_s: np.ndarray # steasy state output, estimated from data
+
+    _constraints: List # list of constraints that will not be changed
+    _objective: cp.Minimize # objective function that will not be changed
 
     # _a1: List[float]
     # @property
@@ -64,13 +68,13 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
     #     return self._a4
     
     def __init__(self, 
-                 sys: LinearizedErrorKinematicAcceModel, io_data: IOData, params: IndirectNominalZeroVParams,
+                 sys: LinearizedErrorKinematicAcceModel, io_data: IOData, params: IndirectNominalFixMuAddDataLateralParams,
                 ) -> None:
         L, lag, R = params.L, params.lag, params.R
         # steady_input = params.steady_input
         # steady_output = params.steady_output
         self._c_sum = [list(accumulate(list_i)) for list_i in params.c]
-        self._io_data = io_data
+        self._io_data_list = [io_data]
         self._m = sys.m
         self._p = sys.p
         self._n = sys.n
@@ -92,17 +96,16 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
         #     print(f"Fited steady state input: {self._u_s}")
         #     print(f"Fited steady state output: {self._y_s}")
         # self._y_s = np.array(sys._C@self._y_s).flatten()
-        self._u_s = np.zeros((self._m,))
-        self._y_s = np.zeros((self._p,))
-        self._y_s[2] = -sys._v_0
+        # self._u_s = np.zeros((self._m,1))
+        # self._y_s = np.zeros((self._p,1))
+        # self._y_s[2] = -sys._v_0
 
-        self._io_data.update_depth(self._L+self._lag)
+        # self._io_data_list[0].update_depth(self._L+self._lag)
 
         self._epsilon = params.epsilon
 
-        l_terminal = self._steps
         # initialize cvxpy variables:
-        width_H = self._io_data.H_input.shape[1]
+        # width_H = self._io_data_list[0].H_input.shape[1]
         self._u = cp.Variable(shape=(self._m*(self._L),))
         self._y = cp.Variable(shape=(self._p*(self._L),))
         # self._alpha = cp.Variable(shape=(width_H,))
@@ -125,26 +128,22 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
 
         # objective function
         R_n = block_diag(*( (self._R,)*self._steps ))
-        obj = cp.quad_form(self._u[0:self._m*(self._steps)]-self._u_obj, R_n)  # error term 
+        self._objective = cp.quad_form(self._u[0:self._m*(self._steps)]-self._u_obj, R_n)  # error term 
         # obj = obj + self._epsilon*self._lam_alph * cp.norm(self._alpha, 2) # penalty term
         # obj = obj + self._lam_sig * cp.norm(self._sigma, 2) # penalty term
-        obj = obj + self._lam_sig * cp.sum_squares(self._sigma) # penalty term
+        self._objective = self._objective + self._lam_sig * cp.sum_squares(self._sigma) # penalty term
+        self._objective = cp.Minimize(self._objective)
 
         # constraints
         # constraints = [self._io_data.H_input @ self._alpha == self._u]
         # constraints.append(self._io_data.H_output_noised @ self._alpha == self._y - self._sigma) # dynamic constraints including slack varialbes
 
         #Computing alpha directly from inverse of H_uy_noised
-        H_uy_noised: np.matrix = np.vstack( (self._io_data.H_input, self._io_data.H_output_noised_part((0, self._lag)), np.ones((1, width_H))) )
-        H_uy_noised_inv = npl.pinv(H_uy_noised)
-        A = self._io_data.H_output_noised_part((self._lag, self._lag+self._L)) @ H_uy_noised_inv
+        # H_uy_noised: np.matrix = np.vstack( (self._io_data.H_input, self._io_data.H_output_noised_part((0, self._lag)), np.ones((1, width_H))) )
+        # H_uy_noised_inv = npl.pinv(H_uy_noised)
+        # A = self._io_data.H_output_noised_part((self._lag, self._lag+self._L)) @ H_uy_noised_inv
         # constraints.append(self._alpha == npl.pinv(H_uy_noised) @ cp.hstack((self._u, self._y[:self._lag*self._p])))
         
-        constraints = [A[:,self._lag*self._m:-self._p*self._lag-1] @ self._u == \
-                       self._y - self._sigma - \
-                        A[:,:self._lag*self._m]@self._xi_t[:self._lag*self._m] - \
-                        A[:,-self._p*self._lag-1:-1]@self._xi_t[-self._p*self._lag:] - \
-                        np.array((A[:,-1:]@np.ones((1,)))).squeeze()]
         # constraints.append(self._u[:self._lag*self._m] == self._xi_t[:self._lag*self._m]) # initial input constraints
         # constraints.append(self._y[:self._p*self._lag] == self._xi_t[-self._p*self._lag:]) # initial output constraints
         # constraints.append(self._u[-self._m:] == self._u[-2*self._m:-self._m])
@@ -152,10 +151,17 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
         # for i in range(2,self._n+10): # -2 == -3, ..., -(n-1) == -n
         #     constraints.append(self._u[-i*self._m:-(i-1)*self._m] == self._u[-(i+1)*self._m:-i*self._m])
         #     constraints.append(self._y[-i*self._p:-(i-1)*self._p] == self._y[-(i+1)*self._p:-i*self._p])
-        constraints.append(self._u[-self._m*self._steps:] == np.hstack((self._u_s,) * self._steps))
-        constraints.append(self._y[-self._p*self._steps:] == np.hstack((self._y_s,) * self._steps)) # terminal constraints
+        # terminal constraints, fix acceleration to zero, velocity to steady state value
+        constraints = []
+        l_terminal = self._steps
+        constraints.append(self._y[-self._p*l_terminal+2::self._p] == np.zeros((l_terminal))) # v
+        constraints.append(self._u[-self._m*l_terminal::self._m] == np.zeros((l_terminal))) # a
+        for i in range(1,l_terminal):
+            constraints.append(self._y[-self._p*i+1] == self._y[-self._p*(i+1)+1]) # mu
+            constraints.append(self._y[-self._p*i] == self._y[-self._p*(i+1)]) # e_lat 
+            constraints.append(self._u[-self._m*i+1] == self._u[-self._m*(i+1)+1]) # delta
 
-        l_constrained = self._L-self._steps
+        l_constrained = self._L
         if sys.A_y is not None:
             P_y_list: List[pt.Polytope] = [] # list of tightened polytopes
             P_y = pt.Polytope(sys.A_y, np.array(sys.b_y))
@@ -187,10 +193,51 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
                 j = int(k/self._steps)
                 constraints.append(P_y_list[j].A@(self._y[i*self._p:(i+1)*self._p]) <= P_y_list[j].b.flatten())
 
-        self._opt_prob = cp.Problem(cp.Minimize(obj), constraints=constraints)
+        self._constraints = constraints
+        
+        # A = self.get_estimation_matrix()
+        
+        # constraints.append(A[:,self._lag*self._m:-self._p*self._lag-1] @ self._u == \
+        #                         self._y - self._sigma - \
+        #                         A[:,:self._lag*self._m]@self._xi_t[:self._lag*self._m] - \
+        #                         A[:,-self._p*self._lag-1:-1]@self._xi_t[-self._p*self._lag:] - \
+        #                         np.array((A[:,-1:]@np.ones((1,)))).squeeze())
 
-    def filter(self, xi_t: np.matrix, u_obj: np.matrix, *args) -> Tuple[np.matrix, str, float]:
-        """Return tuple of (filtered control input, status, optimal value)"""
+        # self._opt_prob = cp.Problem(self._objective, constraints=constraints)
+
+    def filter(self, xi_t: np.matrix, u_obj: np.matrix, set_new_dataset: bool = False) \
+        -> Tuple[np.matrix, str, float]:
+        """Return tuple of (filtered control input, status, optimal value)
+        set_new_dataset: if True, creat a new dataset for next trajectories"""
+        if set_new_dataset:
+            self._io_data_list.append(IODataWith_l(depth=self._L+self._lag, n=self._n, m=self._m, p=self._p)) # create a new dataset
+        
+        # add new data points, pop old data points
+        u_history = xi_t[:self._lag*self._m]
+        u_history = u_history[-self._steps*self._m:]
+        y_history = xi_t[-self._lag*self._p:]
+        y_history = y_history[-self._steps*self._p:]
+        for i in range(self._steps):
+            u = u_history[i*self._m:(i+1)*self._m]
+            y = y_history[i*self._p:(i+1)*self._p]
+            n = np.matrix(np.zeros(y.shape))
+            self._io_data_list[-1].add_point(u, y, n)
+            is_empty = not self._io_data_list[0].remove_last_point()
+        if is_empty: # if a dataset is empty, remove it
+            self._io_data_list.pop(0)
+        
+        # get estimation matrix from current dataset list
+        Phi = self.get_estimation_matrix()
+
+        # dynamic constraint
+        self._constraints.append(Phi[:,self._lag*self._m:-self._p*self._lag-1] @ self._u == \
+                                self._y - self._sigma - \
+                                Phi[:,:self._lag*self._m]@self._xi_t[:self._lag*self._m] - \
+                                Phi[:,-self._p*self._lag-1:-1]@self._xi_t[-self._p*self._lag:] - \
+                                np.array((Phi[:,-1:]@np.ones((1,)))).squeeze())
+
+        self._opt_prob = cp.Problem(objective=self._objective, constraints=self._constraints)
+
         self._xi_t.value = np.array(xi_t.flat)
         self._u_obj.value = np.array(u_obj.flat)
         if self._solver is None:
@@ -199,29 +246,50 @@ class IndirectNominalZeroVFilter(DDSafetyFilter):
             self._opt_prob.solve(verbose=self._verbose, solver=self._solver, warm_start = self._warm_start, **self._solver_args)
         if not (self._opt_prob.status is cp.OPTIMAL or self._opt_prob.status is cp.OPTIMAL_INACCURATE):
             raise Exception(f"Problem not optimal: status is {self._opt_prob.status}")
+        
+        # pop old dynamic constraint
+        self._constraints.pop(-1)
+
         return (np.matrix(self._u.value[:self._m*self._steps]).transpose(), self._opt_prob.status, self._opt_prob.value)
     
+    def get_estimation_matrix(self) -> np.matrix:
+        """Return estimation matrix Phi"""
+        H_uy_noised: np.matrix = np.matrix(np.zeros(( self._p*self._lag+self._m*(self._L+self._lag),0 )))
+        H_future_noised: np.matrix = np.matrix(np.zeros(( self._p*self._L,0 )))
+        for io_data in self._io_data_list:
+            if io_data.length >= self._L+self._lag: # only use data with enough length
+                io_data.update_depth(self._L+self._lag)
+                H_uy_noised_single = np.vstack( (io_data.H_input, io_data.H_output_noised_part((0, self._lag)),) )
+                H_uy_noised = np.hstack(( H_uy_noised, H_uy_noised_single ))
+                H_future_noised = np.hstack(( H_future_noised, io_data.H_output_noised_part((self._lag, self._lag+self._L)) ))
+        width_H = H_uy_noised.shape[1]
+        H_uy_noised: np.matrix = np.vstack( (H_uy_noised, np.ones((1, width_H))) )
+        H_uy_noised_inv = npl.pinv(H_uy_noised)
+        Phi = H_future_noised @ H_uy_noised_inv
+        return Phi
+
     def fit_steady_state(self, l: int, L: int, N: int, K: int) -> Tuple[np.ndarray, np.ndarray]:
         """Return tuple of (steady state input, steady state output)
            Only works for Kinematic Error Dynamics of Cronos"""
-        depth = self._io_data.depth
+        io_data = self._io_data_list[0]
+        depth = io_data.depth
         lag = self._lag+l
         Len = self._steps+L
         uy_s: List[np.matrix] = []
         if K  > 1:
-            step = int((self._io_data.length-N)/(K-1))
+            step = int((io_data.length-N)/(K-1))
         else:
-            step = self._io_data.length
+            step = io_data.length
         for i in range(K):
-            input_data = self._io_data._input_data[i*step:i*step+N]
-            output_data = [y+n for y,n in zip(self._io_data._output_data[i*step:i*step+N], self._io_data._noise_data[i*step:i*step+N])]
+            input_data = io_data._input_data[i*step:i*step+N]
+            output_data = [y+n for y,n in zip(io_data._output_data[i*step:i*step+N], io_data._noise_data[i*step:i*step+N])]
             H_input = HankelMatrix(
                 input_data,
-                self._io_data.Hankel_matrix(lag+Len, input_data)
+                io_data.Hankel_matrix(lag+Len, input_data)
             )
             H_output = HankelMatrix(
                 output_data,
-                self._io_data.Hankel_matrix(lag+Len, output_data)
+                io_data.Hankel_matrix(lag+Len, output_data)
             )
             width_H = H_input._H.shape[1]
             H_uy1_noised: np.matrix = np.vstack( (H_input[:], H_output[:lag], np.ones((1, width_H))) )

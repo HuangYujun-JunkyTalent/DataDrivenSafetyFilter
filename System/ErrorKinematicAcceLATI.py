@@ -14,6 +14,7 @@ from System.LATI import LATI, LATIParams
 class KinematicAcceModelParams:
     l_r: float
     l_f: float
+    m: float
     Ts: float
 
 class KinematicAcceModel:
@@ -22,6 +23,7 @@ class KinematicAcceModel:
     '''
     _l_r: float
     _l_f: float # kinematic parameters
+    _m: float # mass of vehicle
     _Ts: float # sampling time
     @property
     def Ts(self):
@@ -40,6 +42,7 @@ class KinematicAcceModel:
     def __init__(self, params: KinematicAcceModelParams, state0: np.ndarray) -> None:
         self._l_r = params.l_r
         self._l_f = params.l_f
+        self._m = params.m
         self._Ts = params.Ts
         self._state = state0
 
@@ -51,7 +54,7 @@ class KinematicAcceModel:
         self._f_c[0] = self._z[3]*cas.cos(self._z[2]+self._beta)
         self._f_c[1] = self._z[3]*cas.sin(self._z[2]+self._beta)
         self._f_c[2] = self._z[3]*cas.sin(self._beta)/self._l_r
-        self._f_c[3] = self._u[0]
+        self._f_c[3] = self._u[0]/self._m
         # Pay attention to the name here: x is state of ode solver!
         ode = {'x':self._z, 'u':self._u, 'ode':self._f_c}
         self._F_c = cas.integrator('F', 'cvodes', ode, 0, self._Ts)
@@ -123,6 +126,10 @@ class LinearizedErrorKinematicAcceModel(LATI):
     _f_c_fun: cas.Function # kinematic ode function
     _F_c_r: cas.Function # integrator of kinematic error system
 
+    @property
+    def a_max(self):
+        return self.b_u[0,0]/self.kinematic_model._m
+
     def __init__(self, params: LinearizedErrorKinematicAcceModelParams, state_0: np.ndarray) -> None:
         '''
         state_0: initial global state of system, [x_p_0, y_p_0, Psi_0, v_0]
@@ -160,7 +167,7 @@ class LinearizedErrorKinematicAcceModel(LATI):
         # ode function for error dynamics
         self._f_c_r[0] = self._x_r[2]*cas.sin(self._x_r[1] + self._beta)
         self._f_c_r[1] = self._x_r[2]/self.kinematic_model._l_r*cas.sin(self._beta) - self._cur*self._x_r[2]*cas.cos(self._x_r[1] + self._beta)/(1-self._cur*self._x_r[0])
-        self._f_c_r[2] = self._u[0]
+        self._f_c_r[2] = self._u[0]/self.kinematic_model._m
         self._f_c_r[3] = self._x_r[2]*cas.cos(self._x_r[1] + self._beta)/(1-self._cur*self._x_r[0])
         # function to get value of ode function
         self._f_c_fun = cas.Function('f_c', [self._x_r, self._u], [self._f_c_r])

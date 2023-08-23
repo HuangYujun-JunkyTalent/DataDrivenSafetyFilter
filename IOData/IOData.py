@@ -155,7 +155,9 @@ class IOData:
             for i in range(length):
                 u = self.get_input(i, sys, input_rule)
                 y, n = sys.step(u)
-                self.add_point(u, y, n)
+                self._input_data.append(u)
+                self._output_data.append(y)
+                self._noise_data.append(n)
             self._m = sys.m
             self._p = sys.p
             self.update_depth(depth)
@@ -195,25 +197,26 @@ class IOData:
             # separate state into four parts: ++, +-, -+, --
             #to maintain the traj around zero
             #only works approximately
-            t = (i*self._Ts) % 2
-            if i<=2:
+            t = (i*self._Ts)
+            if t<=2:
                 u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*12) + np.sign(sin(t*pi*13)))
                 u_2 = 0.5*self._b_u_d[1,0] * (sin(t*pi*8) + np.sign(sin(t*pi*13)))
-            elif i<=4:
+            elif t<=4:
                 u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*12) + np.sign(sin(t*pi*13)))
                 u_2 = -0.5*self._b_u_d[1,0] * (sin(t*pi*8) + np.sign(sin(t*pi*13)))
-            elif i<=6:
+            elif t<=6:
                 u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*12) + np.sign(sin(t*pi*13)))
                 u_2 = 0.5*self._b_u_d[1,0] * (sin(t*pi*8) + np.sign(sin(t*pi*13)))
             else:
                 u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*12) + np.sign(sin(t*pi*13)))
                 u_2 = -0.5*self._b_u_d[1,0] * (sin(t*pi*8) + np.sign(sin(t*pi*13)))
-            return np.matrix([[u_1],[u_2]])
+            return np.matrix([[u_1],[u_2]]) + self._mean_input
     
     def add_point(self, u: np.matrix, y: np.matrix, n: np.matrix) -> None:
         self._input_data.append(u)
         self._output_data.append(y)
         self._noise_data.append(n)
+        self._length += 1
 
     def update_depth(self, depth: int) -> None:
         self._H_input = self.Hankel_matrix(depth, self._input_data)

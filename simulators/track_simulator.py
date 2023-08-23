@@ -364,7 +364,7 @@ class TrackSimulator:
             self.filter_type_list = [filter_type] # reserve for using different filter types for segments
             self.simulation_input_type = simulation_input_type
             dict_results[(random_seed, track_filter_type, filter_type, simulation_input_type)] = []
-            print(f"Simulating random_seed={random_seed}, track_filter_type={track_filter_type}, filter_type={filter_type}, simulation_input_type={simulation_input_type}")
+            print(f"\n \n Simulating random_seed={random_seed}, track_filter_type={track_filter_type}, filter_type={filter_type}, simulation_input_type={simulation_input_type}")
             for filter_param in filter_params.get(filter_type, [{}]):
                 results = self.simulate_once(random_seed, **filter_param)
                 dict_results[(random_seed, track_filter_type, filter_type, simulation_input_type)].append(results)

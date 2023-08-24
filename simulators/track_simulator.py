@@ -108,9 +108,10 @@ class TrackSimulator:
     n_l_max = 0.002
 
     use_saved_data = False # whether to use saved dataset
+    save_data = True # whether to save dataset
     # maximum control inputs for collecting dataset
     a_d_max = 4
-    delta_d_max = 2e-2
+    delta_d_max = 1e-1
     t_data = 10 # time horizon for dataset, in seconds
     data_model_type = ModelType.DYNAMIC_FEW_OUTPUT # model type used for collecting dataset
     data_input_rule = InputRule.RANDOM_2_WITH_MEAN # input rule used for collecting dataset
@@ -149,9 +150,9 @@ class TrackSimulator:
         half_track_width = self.track_width/2
         epsilon = max(self.n_e_lat_max, self.n_mu_max, self.n_v_max)
         if filter_type == SafetyFilterTypes.INDIRECT_FITTING_TERMINAL:
-            lam_sig = 45000
+            lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -173,7 +174,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -196,7 +197,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_ZERO_V:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -219,7 +220,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_ZERO:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -242,7 +243,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_STOP:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -265,7 +266,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -288,7 +289,7 @@ class TrackSimulator:
         elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA_LATERAL:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
@@ -312,7 +313,7 @@ class TrackSimulator:
             lam_sig = 1500
             lam_alph = 1500/epsilon
             c = [[0.35, 0.1, 0.1, 0.05], [0.4, 0.1, 0.1, 0.05]]
-            R = np.matrix('1 0; 0 100')
+            R = np.matrix('1 0; 0 1')
             lam_sig = kwargs.get('lam_sig', lam_sig)
             lam_alph = kwargs.get('lam_alph', lam_alph)
             c = kwargs.get('c', c)
@@ -639,6 +640,9 @@ class TrackSimulator:
                             A_u_d=np.matrix('1 0; 0 1; -1 0; 0 -1'), b_u_d=np.matrix([[u_0_max],[self.delta_d_max],[u_0_max],[self.delta_d_max]]),
                             n_l = self.n_l_max, lag = self.lag, L = self.L, N_l = int(length/2), K_l = 5)
                 io_data_dict[cur] = io_data
+                if self.save_data:
+                    with open(os.path.join(os.getcwd(), 'datasets', f'io_datas_{self.t_data}_{self.Ts}.pkl'), 'wb') as file:
+                        pickle.dump(io_data_dict, file)
         return io_data_dict
 
     def get_filter(self, **kwargs):

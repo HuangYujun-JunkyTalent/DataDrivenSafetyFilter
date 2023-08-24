@@ -87,7 +87,7 @@ class IndirectNominalFittingFilter(DDSafetyFilter):
             self._u_s = steady_input
             self._y_s = steady_output
         else:
-            self._u_s, self._y_s = self.fit_steady_state(3,5, int(self._io_data.length/3), 8)
+            self._u_s, self._y_s = self.fit_steady_state(3,5, int(self._io_data.length), 1)
             print(f"Fited steady state input: {self._u_s}")
             print(f"Fited steady state output: {self._y_s}")
         # self._y_s = np.array(sys._C@self._y_s).flatten()

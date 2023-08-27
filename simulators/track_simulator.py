@@ -80,8 +80,8 @@ class TrackSimulator:
     Cd = 0.02750696
     Croll = 0.08518052
     # control and output constraints
-    a_min, a_max = -3, 6
-    delta_max = 0.13*math.pi
+    a_min, a_max = -1.1, 5.5
+    delta_max = 0.4
     v_min, v_max = -3, 5
     mu_min, mu_max = -0.5*math.pi, 0.5*math.pi
 
@@ -110,8 +110,8 @@ class TrackSimulator:
     use_saved_data = False # whether to use saved dataset
     save_data = True # whether to save dataset
     # maximum control inputs for collecting dataset
-    a_d_max = 4
-    delta_d_max = 1e-1
+    a_d_max = 3
+    delta_d_max = 0.2
     t_data = 10 # time horizon for dataset, in seconds
     data_model_type = ModelType.DYNAMIC_FEW_OUTPUT # model type used for collecting dataset
     data_input_rule = InputRule.RANDOM_2_WITH_MEAN # input rule used for collecting dataset

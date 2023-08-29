@@ -544,13 +544,22 @@ class TrackSimulator:
                 sys_for_output = self.get_system(cur=self.systems[i_seg].cur, start_point=self.systems[i_seg].segment_start, system_type=self.simulate_model_type)
                 sys_for_output.set_kinematic_model_state(crs_model._state)
                 real_output_list = []
+                if self.filter_type_list[i_seg] in SafetyFilterTypes.direct_types:
+                    u_proposed = self.filter._safety_filters[i_seg]._u.value[self.lag*self.filter._m:]
+                else:
+                    u_proposed = self.filter._safety_filters[i_seg]._u.value
                 for i in range(self.L):
-                    u = u_i[i*sys_for_output.m:(i+1)*sys_for_output.m]
-                    y, e_lin, n = sys_for_output.step_lin(u)
-                    y = np.array(y).flatten()
-                    y[1] = y[1] * 180 / np.pi # from rad to deg
-                    y[2] = y[2] + self.v_0 # from deviation from steady state to actual velocity
-                    real_output_list.append(y)
+                    try:
+                        u = u_proposed[i*sys_for_output.m:(i+1)*sys_for_output.m]
+                        u = np.matrix(np.reshape(u, (sys_for_output.m, 1)))
+                        y, e_lin, n = sys_for_output.step_lin(u)
+                        y = np.array(y).flatten()
+                        y[1] = y[1] * 180 / np.pi # from rad to deg
+                        y[2] = y[2] + self.v_0 # from deviation from steady state to actual velocity
+                        real_output_list.append(y)
+                    except RuntimeError as e:
+                        print(e, "during simulation of real system, returning partial results")
+                        break
                 results.add_predicted_error_slice(i_block*self.steps*self.Ts, predicted_traj)
                 results.add_predicted_error_slack_slice(i_block*self.steps*self.Ts, predicted_with_slack)
                 results.add_error_slice(i_block*self.steps*self.Ts, real_output_list)

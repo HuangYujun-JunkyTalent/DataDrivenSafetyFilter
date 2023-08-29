@@ -46,8 +46,17 @@ class DynamicErrorModel:
     def p(self) -> int:
         return self._p
     params: DynamicErrorModelParams
+    @property
+    def cur(self) -> float:
+        return self.params.cur
+    @property
+    def segment_start(self):
+        return self.params.segment_start
 
     dynamic_model: DynamicModel
+    @property
+    def Ts(self) -> float:
+        return self.params.dynamic_params.Ts
 
     _p_Center: Optional[np.ndarray] # position of certer of circle, only valid if cur > 0
     _R: Optional[float] # radius of circle, only valid if cur > 0
@@ -357,7 +366,7 @@ class DynamicErrorModelFewOutput(DynamicErrorModel):
         self._state = np.array(state_tp['xf']).flatten()
 
         v = math.sqrt(state_t[2]**2 + state_t[3]**2)
-        state_few = np.hstack(( state_t[0:2], np.array([v]) ))
+        state_few = np.hstack(( state_t[0:2], np.array([v-self.params.v_0]) ))
         y = np.matrix(state_few).T
         n_lin = np.matrix(np.zeros((self.p, 1)))
         n = self.get_noise()

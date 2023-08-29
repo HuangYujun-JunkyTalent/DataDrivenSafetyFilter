@@ -37,6 +37,7 @@ class Results:
     _error_trajectory_noise: List[np.ndarray]
     _error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
     _predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
+    _predicted_error_with_slack_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices added with slack varialbes, (start time, trajectory)
 
     _calculation_time: List[float]
     _opt_value_list: List[float]
@@ -69,6 +70,7 @@ class Results:
         self._error_trajectory_noise = []
         self._error_trajectory_slices = []
         self._predicted_error_trajectory_slices = []
+        self._predicted_error_with_slack_slices = []
 
         self._calculation_time = []
         self._opt_value_list = []
@@ -103,6 +105,9 @@ class Results:
     def add_predicted_error_slice(self, start_time: float, predicted_error_slice: List[np.ndarray]) -> None:
         # assert (end_time-start_time)/(len(predicted_error_slice)-1) == self.Ts, "Slice length does not match the time step"
         self._predicted_error_trajectory_slices.append((start_time, predicted_error_slice))
+    
+    def add_predicted_error_slack_slice(self, start_time: float, predicted_error_slack_slice: List[np.ndarray]) -> None:
+        self._predicted_error_with_slack_slices.append((start_time, predicted_error_slack_slice))
     
     def add_calculation_time(self, calculation_time: float) -> None:
         self._calculation_time.append(calculation_time)
@@ -215,6 +220,14 @@ class Results:
         """
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._predicted_error_trajectory_slices:
+            self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+        return ax
+    
+    def plot_predicted_error_with_slack_slices(self, index: int, ax: plt.Axes,
+                                               line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
+                                              ) -> plt.Axes:
+        line_style = self.get_line_style(line_style)
+        for t, trajectory_slice in self._predicted_error_with_slack_slices:
             self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
         return ax
 

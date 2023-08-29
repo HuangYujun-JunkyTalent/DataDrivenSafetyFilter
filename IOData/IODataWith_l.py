@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.linalg as npl
 import numpy.random as npr
+from pylfsr import LFSR
 
 from enum import Enum
 from typing import Tuple, List, Optional, Union
@@ -35,7 +36,8 @@ class IODataWith_l(IOData):
     
     def __init__(self,  depth: int,
                  sys: Optional[LinearizedErrorKinematicAcceModel] = None, n: Optional[int] = None, m: Optional[int] = None, p: Optional[int] = None,
-                 input_rule: Optional[InputRule] = None, A_u_d: Optional[np.matrix] = None, b_u_d: Optional[np.matrix] = None, Ts: Optional[float] = 0.01, mean_input: Optional[np.matrix] = None,
+                 input_rule: Optional[InputRule] = None, A_u_d: Optional[np.matrix] = None, b_u_d: Optional[np.matrix] = None, 
+                 d_u_max: Optional[np.matrix] = None, Ts: Optional[float] = 0.01, mean_input: Optional[np.matrix] = None,
                  length: Optional[int] = None,
                  n_l: float = 0.002, lag: int = 5, L: int = 50, N_l: int = 100, K_l: int = 5) -> None:
         '''
@@ -46,11 +48,27 @@ class IODataWith_l(IOData):
         '''
         if sys is not None:
             assert length > 0, "Try to initialize with length {length} and input rule {input_rule}, which is invalid!"
-            if input_rule is InputRule.RANDOM_2_WITH_MEAN or InputRule.MIX_WITH_MEAN:
+            if input_rule in InputRule.methods_with_mean:
                 assert mean_input is not None, f"When using {input_rule}, mean_input needs to be specified!"
                 assert mean_input.shape[0] == sys.m, "mean_input.shape[0] != sys.m"
                 assert mean_input.shape[1] == 1, "mean_input.shape[1] != 1"
                 self._mean_input = mean_input
+            if input_rule is InputRule.BOUNDED_RATE_WITH_MEAN:
+                assert d_u_max is not None, f"When using {input_rule}, d_u_max needs to be specified!"
+                self._d_u_max = d_u_max
+            if input_rule is InputRule.PRBS_RATE_WITH_MEAN:
+                assert d_u_max is not None, f"When using {input_rule}, d_u_max needs to be specified!"
+                self._d_u_max = d_u_max
+                init_state = [1,0,0,0,0,0,0]
+                f_poly = [7,1]
+                # update PRBS state every _i_block_prbs steps
+                self._i_block_prbs = int(length/(2**len(init_state)-1))
+                self.L = LFSR(initstate=init_state, fpoly=f_poly, counter_start_zero=False)
+            if input_rule is InputRule.PRBS_WITH_MEAN:
+                init_state = [1,0,0,0,0,0,0]
+                f_poly = [7,1]
+                self._i_block_prbs = int(length/(2**len(init_state)-1))
+                self.L = LFSR(initstate=init_state, fpoly=f_poly, counter_start_zero=False)
             # if n is None:
             #     n = sys.n
             # self._n = n

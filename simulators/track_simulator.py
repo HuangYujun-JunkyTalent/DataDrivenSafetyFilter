@@ -22,6 +22,8 @@ from tools.simple_track_generator import trackGenerator, arc, line
 from SafetyFilters.DDSF import SFParams
 from SafetyFilters.Indirect_Nominal_Fitting import IndirectNominalFittingFilter, IndirectNominalFittingParams
 from SafetyFilters.Indirect_Nominal_FixMu import IndirectNominalFixMuFilter, IndirectNominalFixMuParams
+from SafetyFilters.Indirect_Nominal_FixMu_Weighting import IndirectNominalFixMuWeightingFilter, IndirectNominalFixMuWeightingParams
+from SafetyFilters.Indirect_Nominal_FixMu_Weighting_Add_Data import IndirectNominalFixMuWeightingAddDataFilter, IndirectNominalFixMuWeightingAddDataParams
 from SafetyFilters.Indirect_Nominal_Stop import IndirectNominalStopFilter, IndirectNominalStopParams
 from SafetyFilters.Indirect_Nominal_Zero import IndirectNominalZeroFilter, IndirectNominalZeroParams
 from SafetyFilters.Indirect_Nominal_ZeroV import IndirectNominalZeroVFilter, IndirectNominalZeroVParams
@@ -82,6 +84,8 @@ class TrackSimulator:
     # control and output constraints
     a_min, a_max = -1.1, 5.5
     delta_max = 0.4
+    d_a_max = 27.62
+    d_delta_max = 40
     v_min, v_max = -3, 5
     mu_min, mu_max = -0.5*math.pi, 0.5*math.pi
 
@@ -129,6 +133,7 @@ class TrackSimulator:
     # simulation time
     t_sim = 1
     num_predicted_traj = 5 # number of predicted trajectories to be saved
+    first_save_time = 0.6 # time when the first predicted trajectory is saved
 
     # filter parameters, those are important also for simulation
     filter_model_type = ModelType.KINEMATIC
@@ -181,6 +186,52 @@ class TrackSimulator:
             epsilon = kwargs.get('epsilon', epsilon)
 
             filter_params = IndirectNominalFixMuParams(
+                L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                c=[
+                    [c_i*half_track_width for c_i in c[0]],
+                    [c_i*self.mu_max for c_i in c[1]],
+                ],
+                sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
+                                    solver_args={'mosek_params':{
+                                        'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                                        'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
+                                        'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            )
+        elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            R = np.matrix('1 0; 0 1')
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            R = kwargs.get('R', R)
+            epsilon = kwargs.get('epsilon', epsilon)
+
+            filter_params = IndirectNominalFixMuWeightingParams(
+                L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                c=[
+                    [c_i*half_track_width for c_i in c[0]],
+                    [c_i*self.mu_max for c_i in c[1]],
+                ],
+                sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
+                                    solver_args={'mosek_params':{
+                                        'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                                        'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
+                                        'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            )
+        elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            R = np.matrix('1 0; 0 1')
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            R = kwargs.get('R', R)
+            epsilon = kwargs.get('epsilon', epsilon)
+
+            filter_params = IndirectNominalFixMuWeightingAddDataParams(
                 L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
                 c=[
                     [c_i*half_track_width for c_i in c[0]],
@@ -340,6 +391,8 @@ class TrackSimulator:
         params = self.get_filter_params(cur, filter_type, **kwargs)
         FilterClass = {SafetyFilterTypes.INDIRECT_FITTING_TERMINAL: IndirectNominalFittingFilter,
                         SafetyFilterTypes.INDIRECT_FIX_MU: IndirectNominalFixMuFilter,
+                        SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING: IndirectNominalFixMuWeightingFilter,
+                        SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA: IndirectNominalFixMuWeightingAddDataFilter,
                         SafetyFilterTypes.INDIRECT_ZERO_V: IndirectNominalZeroVFilter,
                         SafetyFilterTypes.INDIRECT_ZERO: IndirectNominalZeroFilter,
                         SafetyFilterTypes.INDIRECT_STOP: IndirectNominalStopFilter,
@@ -436,7 +489,8 @@ class TrackSimulator:
         # prepare log and block number for simulation
         N = int(self.t_sim/self.Ts)
         N_blocks = int(N/self.steps)
-        N_slices = int(N_blocks/self.num_predicted_traj) # save predicted trajectory every N_slices blocks
+        first_block_to_save = int(self.first_save_time/self.Ts/self.steps)
+        N_slices = int((N_blocks-first_block_to_save)/self.num_predicted_traj) # save predicted trajectory every N_slices blocks
 
         for i_block in range(N_blocks):
             t_block = i_block*self.steps*self.Ts
@@ -469,17 +523,37 @@ class TrackSimulator:
             results.add_sigma_value(self.filter._safety_filters[i_seg]._sigma.value)
 
             # save predicted trajectory every N_slices blocks
-            if i_block%N_slices == 0:
-                if self.filter_type_list[i_seg] == SafetyFilterTypes.DIRECT_ZERO_TERMINAL:
+            if (i_block-first_block_to_save)%N_slices == 0:
+                if self.filter_type_list[i_seg] in SafetyFilterTypes.direct_types:
                     predicted_traj = np.split(self.filter._safety_filters[i_seg]._y.value[self.lag*self.filter._p:], self.L)
+                    predicted_with_slack = self.filter._safety_filters[i_seg]._y.value[self.lag*self.filter._p:] - self.filter._safety_filters[i_seg]._sigma.value[self.lag*self.filter._p:]
+                    predicted_with_slack = np.split(predicted_with_slack, self.L)
                 # elif self.filter_type_list[i_seg] == SafetyFilterTypes.INDIRECT_FITTING_TERMINAL:
                 else:
                     predicted_traj = np.split(self.filter._safety_filters[i_seg]._y.value, self.L)
+                    predicted_with_slack = self.filter._safety_filters[i_seg]._y.value - self.filter._safety_filters[i_seg]._sigma.value
+                    predicted_with_slack = np.split(predicted_with_slack, self.L)
                 # transforms for readability
                 for y in predicted_traj:
                     y[1] = y[1] * 180 / np.pi # from rad to deg
                     y[2] = y[2] + self.v_0 # from deviation from steady state to actual velocity
+                for y in predicted_with_slack:
+                    y[1] = y[1] * 180 / np.pi # from rad to deg
+                    y[2] = y[2] + self.v_0 # from deviation from steady state to actual velocity
+                # get and save real output when the proposed inputs are applied
+                sys_for_output = self.get_system(cur=self.systems[i_seg].cur, start_point=self.systems[i_seg].segment_start, system_type=self.simulate_model_type)
+                sys_for_output.set_kinematic_model_state(crs_model._state)
+                real_output_list = []
+                for i in range(self.L):
+                    u = u_i[i*sys_for_output.m:(i+1)*sys_for_output.m]
+                    y, e_lin, n = sys_for_output.step_lin(u)
+                    y = np.array(y).flatten()
+                    y[1] = y[1] * 180 / np.pi # from rad to deg
+                    y[2] = y[2] + self.v_0 # from deviation from steady state to actual velocity
+                    real_output_list.append(y)
                 results.add_predicted_error_slice(i_block*self.steps*self.Ts, predicted_traj)
+                results.add_predicted_error_slack_slice(i_block*self.steps*self.Ts, predicted_with_slack)
+                results.add_error_slice(i_block*self.steps*self.Ts, real_output_list)
             
             # save and update system state, for `step` times
             for j in range(self.steps):
@@ -638,6 +712,7 @@ class TrackSimulator:
                 io_data = IODataWith_l(
                             self.L+self.lag, sys=sys, input_rule=self.data_input_rule, mean_input=np.matrix(zero_input).transpose(), length=length,
                             A_u_d=np.matrix('1 0; 0 1; -1 0; 0 -1'), b_u_d=np.matrix([[u_0_max],[self.delta_d_max],[u_0_max],[self.delta_d_max]]),
+                            d_u_max=np.matrix([[self.a_d_max*self.m],[self.delta_d_max]]),
                             n_l = self.n_l_max, lag = self.lag, L = self.L, N_l = int(length/2), K_l = 5)
                 io_data_dict[cur] = io_data
                 if self.save_data:

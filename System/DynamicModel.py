@@ -40,6 +40,11 @@ class DynamicModel:
     _f_c: cas.SX # ODE function
     _F_c: cas.Function
 
+    # compatibality with linearized model
+    m = 2
+    n = 5
+    p = 3
+
     def __init__(self, params: DynamicModelParams, initial_state: np.ndarray) -> None:
         """
         initial_state: [x_p0, y_p0, Psi_0, v_x0, v_y0, omega_0]
@@ -104,6 +109,15 @@ class DynamicModelFewOutput:
     Dynamic model of chronos, but only ouput [xp, yp, yaw, v], similar to that of kinematic model
     """
     dynamic_model: DynamicModel
+
+    # compatibality with linearized model
+    m = 2
+    n = 5
+    p = 3
+
+    @property
+    def _state(self):
+        return self.dynamic_model._state
 
     @property
     def state(self):

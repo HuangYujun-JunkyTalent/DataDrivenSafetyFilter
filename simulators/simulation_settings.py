@@ -9,6 +9,8 @@ class SafetyFilterTypes(Enum):
     """
     INDIRECT_FITTING_TERMINAL = 'fitting steady state'
     INDIRECT_FIX_MU = 'fix mu'
+    INDIRECT_FIX_MU_WEIGHTING = 'fix mu with weighting'
+    INDIRECT_FIX_MU_WEIGHTING_ADD_DATA = 'fix mu with\n weighting and add data'
     INDIRECT_ZERO = 'all zero'
     INDIRECT_ZERO_V = 'stop at \n center line'
     INDIRECT_STOP = 'stop anywhere \n on the track'
@@ -18,8 +20,16 @@ class SafetyFilterTypes(Enum):
 
     @classmethod
     @property
+    def direct_types(self) -> Tuple[SafetyFilterTypes]:
+        return (
+            SafetyFilterTypes.DIRECT_ZERO_TERMINAL,
+        )
+
+    @classmethod
+    @property
     def add_data_types(self) -> Tuple[SafetyFilterTypes]:
         return (
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA,
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA_LATERAL,
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA,
         )
@@ -30,6 +40,8 @@ class SafetyFilterTypes(Enum):
         return (
             SafetyFilterTypes.INDIRECT_FITTING_TERMINAL,
             SafetyFilterTypes.INDIRECT_FIX_MU,
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING,
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA,
             SafetyFilterTypes.INDIRECT_ZERO,
             SafetyFilterTypes.INDIRECT_ZERO_V,
             SafetyFilterTypes.INDIRECT_STOP,

@@ -100,9 +100,18 @@ class LinearizedErrorKinematicAcceModel(LATI):
     output is [e_lat, mu, v-v_0]
     '''
     kinematic_model: KinematicAcceModel
+    @property
+    def Ts(self):
+        return self.kinematic_model.Ts
 
     _cur: float # curvature of track center line, >=0
+    @property
+    def cur(self):
+        return self._cur
     _state_s0: np.ndarray # position and orientation of starting point of track, [x_p_0, y_p_0, Psi_0]
+    @property
+    def segment_start(self):
+        return self._state_s0
     _v_0: float # reference velocity
     _p_Center: Optional[np.ndarray] # position of certer of circle, only valid if self._cur > 0
     _R: Optional[float] # radius of circle, only valid if self._cur > 0

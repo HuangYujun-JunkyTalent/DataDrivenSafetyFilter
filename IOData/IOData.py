@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.linalg as npl
 import numpy.random as npr
+from pylfsr import LFSR
 
 from enum import Enum
 from typing import Tuple, List, Optional, Union
@@ -20,6 +21,21 @@ class InputRule(Enum):
     RANDOM_2_WITH_MEAN = 3
     SINE = 4
     MIX_WITH_MEAN = 5
+    BOUNDED_RATE_WITH_MEAN = 6
+    PRBS_RATE_WITH_MEAN = 7
+    PRBS_WITH_MEAN = 8
+
+    @classmethod
+    @property
+    def methods_with_mean(self):
+        return (
+            InputRule.RANDOM_2_WITH_MEAN,
+            InputRule.MIX_WITH_MEAN,
+            InputRule.BOUNDED_RATE_WITH_MEAN,
+            InputRule.PRBS_RATE_WITH_MEAN,
+            InputRule.PRBS_WITH_MEAN
+        )
+
 
 class HankelMatrix:
     '''
@@ -99,6 +115,7 @@ class IOData:
     # input constraint for generating io_data only
     _A_u_d: np.matrix
     _b_u_d: np.matrix
+    _d_u_max: np.matrix # maximum change rate of input (Optional)
     _Ts: float
 
     def __init__(self, depth: int,
@@ -211,6 +228,56 @@ class IOData:
                 u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*3.2) + np.sign(sin(t*pi*3.5)))
                 u_2 = -0.5*self._b_u_d[1,0] * (sin(t*pi*2.1) + np.sign(sin(t*pi*3.7)))
             return np.matrix([[u_1],[u_2]]) + self._mean_input
+        if input_rule is InputRule.BOUNDED_RATE_WITH_MEAN:
+            if len(self._input_data) == 0:
+                last_delta_input = np.matrix('0;0')
+            else:
+                last_delta_input = self._input_data[-1] - self._mean_input
+            d_u = sys.Ts*np.matrix(np.vstack( (2 * self._d_u_max[0,0] * (npr.rand(1,1)-0.5),
+                                               2 * self._d_u_max[1,0] * (npr.rand(1,1)-0.5)) ))
+            u = d_u + last_delta_input
+            # saturate if out of bound
+            if u[0,0] > self._b_u_d[0,0]:
+                u[0,0] = self._b_u_d[0,0]
+            elif u[0,0] < -self._b_u_d[0,0]:
+                u[0,0] = -self._b_u_d[0,0]
+            if u[1,0] > self._b_u_d[1,0]:
+                u[1,0] = self._b_u_d[1,0]
+            elif u[1,0] < -self._b_u_d[1,0]:
+                u[1,0] = -self._b_u_d[1,0]
+            return u + self._mean_input
+        if input_rule is InputRule.PRBS_RATE_WITH_MEAN:
+            bit = self.L.outbit
+            if i % self._i_block_prbs == 0:
+                self.L.next()
+            if bit == 1:
+                d_u = sys.Ts*self._d_u_max
+            else:
+                d_u = -sys.Ts*self._d_u_max
+            if len(self._input_data) == 0:
+                last_delta_input = np.matrix('0;0')
+            else:
+                last_delta_input = self._input_data[-1] - self._mean_input
+            u = d_u + last_delta_input
+            # saturate if out of bound
+            if u[0,0] > self._b_u_d[0,0]:
+                u[0,0] = self._b_u_d[0,0]
+            elif u[0,0] < -self._b_u_d[0,0]:
+                u[0,0] = -self._b_u_d[0,0]
+            if u[1,0] > self._b_u_d[1,0]:
+                u[1,0] = self._b_u_d[1,0]
+            elif u[1,0] < -self._b_u_d[1,0]:
+                u[1,0] = -self._b_u_d[1,0]
+            return u + self._mean_input
+        if input_rule is InputRule.PRBS_WITH_MEAN:
+            bit = self.L.outbit
+            if i % self._i_block_prbs == 0:
+                self.L.next()
+            if bit == 1:
+                u = self._b_u_d[:2]
+            else:
+                u = -self._b_u_d[0:2]
+            return u + self._mean_input
     
     def add_point(self, u: np.matrix, y: np.matrix, n: np.matrix) -> None:
         self._input_data.append(u)

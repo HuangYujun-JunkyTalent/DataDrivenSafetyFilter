@@ -216,16 +216,16 @@ class IOData:
             #only works approximately
             t = i/self.length * 9
             if t<=2:
-                u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*3.2) + np.sign(sin(t*pi*3.5)))
+                u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*9.2) + np.sign(sin(t*pi*13.5)))
                 u_2 = 0.5*self._b_u_d[1,0] * (sin(t*pi*2.1) + np.sign(sin(t*pi*3.7)))
             elif t<=4:
-                u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*3.2) + np.sign(sin(t*pi*3.5)))
+                u_1 = 0.5*self._b_u_d[0,0] * (sin(t*pi*9.2) + np.sign(sin(t*pi*13.5)))
                 u_2 = -0.5*self._b_u_d[1,0] * (sin(t*pi*2.1) + np.sign(sin(t*pi*3.7)))
             elif t<=6:
-                u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*3.2) + np.sign(sin(t*pi*3.5)))
+                u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*9.2) + np.sign(sin(t*pi*13.5)))
                 u_2 = 0.5*self._b_u_d[1,0] * (sin(t*pi*2.1) + np.sign(sin(t*pi*3.7)))
             else:
-                u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*3.2) + np.sign(sin(t*pi*3.5)))
+                u_1 = -0.5*self._b_u_d[0,0] * (sin(t*pi*9.2) + np.sign(sin(t*pi*13.5)))
                 u_2 = -0.5*self._b_u_d[1,0] * (sin(t*pi*2.1) + np.sign(sin(t*pi*3.7)))
             return np.matrix([[u_1],[u_2]]) + self._mean_input
         if input_rule is InputRule.BOUNDED_RATE_WITH_MEAN:

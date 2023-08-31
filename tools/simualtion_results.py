@@ -4,6 +4,7 @@ from copy import deepcopy
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 
 from IOData.IOData import IOData, InputRule
 from .simple_track_generator import trackGenerator
@@ -215,30 +216,63 @@ class Results:
     
     def plot_predicted_error_slices(self, index: int, ax: plt.Axes,
                                     line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                    ) -> plt.Axes:
+                                    label_y_axis: bool = False) -> plt.Axes:
         """Plot predicted error_state slices
         """
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._predicted_error_trajectory_slices:
             self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+        if label_y_axis:
+            if index == 0:
+                ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
+            elif index == 1:
+                ax.set_ylabel(r'$\mu$ [deg]', fontsize=self.label_size)
+            elif index == 2:
+                ax.set_ylabel(r'$v$ [m/s]', fontsize=self.label_size)
+            elif index == 3:
+                ax.set_ylabel(r'$l$ [m]', fontsize=self.label_size)
+        ax.plot([], [], **line_style, label='Predicted error trajectory (y)')
+        ax.legend()
         return ax
     
     def plot_predicted_error_with_slack_slices(self, index: int, ax: plt.Axes,
                                                line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                              ) -> plt.Axes:
+                                              label_y_axis: bool = False) -> plt.Axes:
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._predicted_error_with_slack_slices:
             self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+        if label_y_axis:
+            if index == 0:
+                ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
+            elif index == 1:
+                ax.set_ylabel(r'$\mu$ [deg]', fontsize=self.label_size)
+            elif index == 2:
+                ax.set_ylabel(r'$v$ [m/s]', fontsize=self.label_size)
+            elif index == 3:
+                ax.set_ylabel(r'$l$ [m]', fontsize=self.label_size)
+        ax.plot([], [], **line_style, label=r'Predicted error trajectory with slack (y-$\sigma$)')
+        ax.legend()
         return ax
 
     def plot_error_slices(self, index: int, ax: plt.Axes,
                                     line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                    ) -> plt.Axes:
+                                    label_y_axis: bool = False) -> plt.Axes:
         """Plot predicted error_state slices
         """
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._error_trajectory_slices:
             self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+        if label_y_axis:
+            if index == 0:
+                ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
+            elif index == 1:
+                ax.set_ylabel(r'$\mu$ [deg]', fontsize=self.label_size)
+            elif index == 2:
+                ax.set_ylabel(r'$v$ [m/s]', fontsize=self.label_size)
+            elif index == 3:
+                ax.set_ylabel(r'$l$ [m]', fontsize=self.label_size)
+        ax.plot([], [], **line_style, label='Real trajectory')
+        ax.legend()
         return ax
 
     def plot_time_sequence(self, ax: plt.Axes,

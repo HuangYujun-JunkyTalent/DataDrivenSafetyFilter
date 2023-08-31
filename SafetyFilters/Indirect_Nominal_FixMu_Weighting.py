@@ -271,7 +271,7 @@ class IndirectNominalFixMuWeightingFilter(DDSafetyFilter):
         delta_H_xi  = H_xi - xi_t
         d_inv_array = np.zeros((width_H,))
         for i in range(width_H):
-            d_inv_array[i] = 1 / (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
+            d_inv_array[i] = np.exp(-(delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0])
         D_inv = np.diag(d_inv_array)
 
         # calculate the estimation matrix

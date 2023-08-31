@@ -68,6 +68,7 @@ class SimulationInputRule(Enum):
     SINE_WAVE = 1
     MAX_THROTTLE_SINE_STEER = 2
     MAX_THROTTLE = 3
+    SINE_WITH_MEAN = 4
 
 
 class ModelType(Enum):

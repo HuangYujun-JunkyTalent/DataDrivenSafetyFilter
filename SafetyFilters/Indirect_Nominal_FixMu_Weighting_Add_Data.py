@@ -26,6 +26,7 @@ class IndirectNominalFixMuWeightingAddDataParams:
     lam_sig: float
     epsilon: float
     c: List[List[float]]
+    t_new_data: float = 6.0
     # steady_input: Optional[np.ndarray] = None
     # steady_output: Optional[np.ndarray] = None
     sf_params: SFParams = SFParams()
@@ -79,6 +80,9 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         self._p = sys.p
         self._n = sys.n
         self._L = L
+        self._Ts = sys.Ts
+        self._t_new_data = params.t_new_data
+        self._new_data_count = 0
         assert self._L >= 2*self._n, f"Prediction horizon too short! System order is {self._n}, horizon given is {self._L}."
         self._lag = lag
         self._R = R
@@ -194,6 +198,8 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
                 constraints.append(P_y_list[j].A@(self._y[i*self._p:(i+1)*self._p]) <= P_y_list[j].b.flatten())
 
         self._constraints = constraints
+
+        self._first_io_data_poped = False
         
         # A = self.get_estimation_matrix()
         
@@ -217,14 +223,17 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         u_history = u_history[-self._steps*self._m:]
         y_history = xi_t[-self._lag*self._p:]
         y_history = y_history[-self._steps*self._p:]
-        for i in range(self._steps):
-            u = u_history[i*self._m:(i+1)*self._m]
-            y = y_history[i*self._p:(i+1)*self._p]
-            n = np.matrix(np.zeros(y.shape))
-            self._io_data_list[-1].add_point(u, y, n)
-            is_empty = not self._io_data_list[0].remove_last_point()
-        if is_empty: # if a dataset is empty, remove it
-            self._io_data_list.pop(0)
+        if self._new_data_count*self._Ts < self._t_new_data:
+            for i in range(self._steps):
+                u = u_history[i*self._m:(i+1)*self._m]
+                y = y_history[i*self._p:(i+1)*self._p]
+                n = np.matrix(np.zeros(y.shape))
+                self._io_data_list[-1].add_point(u, y, n)
+                is_empty = not self._io_data_list[0].remove_last_point()
+                self._new_data_count += self._steps
+            if is_empty: # if a dataset is empty, remove it
+                self._io_data_list.pop(0)
+                self._first_io_data_poped = True
         
         # get estimation matrix from current dataset list
         Phi = self.get_estimation_matrix(xi_t)

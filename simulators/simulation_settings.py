@@ -13,6 +13,8 @@ class SafetyFilterTypes(Enum):
     INDIRECT_FIX_MU_WEIGHTING_ADD_DATA = 'fix mu with\n weighting and add data'
     INDIRECT_ZERO = 'all zero'
     INDIRECT_ZERO_V = 'stop at \n center line'
+    INDIRECT_ZERO_V_WEIGHTING = 'stop at \n center line \n with weighting'
+    INDIRECT_ZERO_V_WEIGHTING_ADD_DATA = 'stop at \n center line \n with weighting \n and add data'
     INDIRECT_STOP = 'stop anywhere \n on the track'
     INDIRECT_FIX_MU_ADD_DATA = auto()
     INDIRECT_FIX_MU_ADD_DATA_LATERAL = 'fix mu and \n add data'
@@ -32,6 +34,7 @@ class SafetyFilterTypes(Enum):
             SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA,
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA_LATERAL,
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA,
+            SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA,
         )
 
     @classmethod
@@ -47,6 +50,8 @@ class SafetyFilterTypes(Enum):
             SafetyFilterTypes.INDIRECT_STOP,
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA_LATERAL,
             SafetyFilterTypes.DIRECT_ZERO_TERMINAL,
+            SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING,
+            SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA,
         )
 
     @classmethod

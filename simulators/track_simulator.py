@@ -27,6 +27,8 @@ from SafetyFilters.Indirect_Nominal_FixMu_Weighting_Add_Data import IndirectNomi
 from SafetyFilters.Indirect_Nominal_Stop import IndirectNominalStopFilter, IndirectNominalStopParams
 from SafetyFilters.Indirect_Nominal_Zero import IndirectNominalZeroFilter, IndirectNominalZeroParams
 from SafetyFilters.Indirect_Nominal_ZeroV import IndirectNominalZeroVFilter, IndirectNominalZeroVParams
+from SafetyFilters.Indirect_Nominal_ZeroV_Weighting import IndirectNominalZeroVWeightingFilter, IndirectNominalZeroVWeightingParams
+from SafetyFilters.Indirect_Nominal_ZeroV_Weighting_Add_Data import IndirectNominalZeroVWeightingAddDataFilter, IndirectNominalZeroVWeightingAddDataParams
 from SafetyFilters.Indirect_Nominal_FixMu_AddData import IndirectNominalFixMuAddDataFilter, IndirectNominalFixMuAddDataParams
 from SafetyFilters.Indirect_Nominal_FixMu_AddDataLateral import IndirectNominalFixMuAddDataLateralFilter, IndirectNominalFixMuAddDataLateralParams
 from SafetyFilters.Direct_Nominal_Zero import DirectNominalZeroFilter, DirectNominalZeroParams
@@ -208,14 +210,12 @@ class TrackSimulator:
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
             epsilon = kwargs.get('epsilon', epsilon)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
 
             filter_params = IndirectNominalFixMuWeightingParams(
                 L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
                 c=[
-                    [c_i*half_track_width for c_i in c[0]],
-                    [c_i*self.mu_max for c_i in c[1]],
-                    [c_i*(self.v_x_max-self.v_x_min)/2 for c_i in c[2]],
-                    [c_i*(self.v_y_max-self.v_y_min)/2 for c_i in c[3]],
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
                 ],
                 sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
                                     solver_args={'mosek_params':{
@@ -234,15 +234,13 @@ class TrackSimulator:
             R = kwargs.get('R', R)
             epsilon = kwargs.get('epsilon', epsilon)
             t_new_data = kwargs.get('t_new_data', 6.0)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
 
             filter_params = IndirectNominalFixMuWeightingAddDataParams(
                 L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
                 t_new_data=t_new_data,
                 c=[
-                    [c_i*half_track_width for c_i in c[0]],
-                    [c_i*self.mu_max for c_i in c[1]],
-                    [c_i*(self.v_x_max-self.v_x_min)/2 for c_i in c[2]],
-                    [c_i*(self.v_y_max-self.v_y_min)/2 for c_i in c[3]],
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
                 ],
                 sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
                                     solver_args={'mosek_params':{
@@ -266,6 +264,55 @@ class TrackSimulator:
                 c=[
                     [c_i*half_track_width for c_i in c[0]],
                     [c_i*self.mu_max for c_i in c[1]],
+                ],
+                sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
+                                    solver_args={'mosek_params':{
+                                        'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                                        'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
+                                        'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            )
+        elif filter_type == SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            R = np.matrix('1 0; 0 1')
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            R = kwargs.get('R', R)
+            epsilon = kwargs.get('epsilon', epsilon)
+            t_new_data = kwargs.get('t_new_data', 6.0)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
+
+            filter_params = IndirectNominalZeroVWeightingParams(
+                L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                c=[
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
+                ],
+                sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
+                                    solver_args={'mosek_params':{
+                                        'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                                        'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
+                                        'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            )
+        elif filter_type == SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            R = np.matrix('1 0; 0 1')
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            R = kwargs.get('R', R)
+            epsilon = kwargs.get('epsilon', epsilon)
+            t_new_data = kwargs.get('t_new_data', 6.0)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
+
+            filter_params = IndirectNominalZeroVWeightingAddDataParams(
+                L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                t_new_data=t_new_data,
+                c=[
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
                 ],
                 sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
                                     solver_args={'mosek_params':{
@@ -401,6 +448,8 @@ class TrackSimulator:
                         SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING: IndirectNominalFixMuWeightingFilter,
                         SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA: IndirectNominalFixMuWeightingAddDataFilter,
                         SafetyFilterTypes.INDIRECT_ZERO_V: IndirectNominalZeroVFilter,
+                        SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING: IndirectNominalZeroVWeightingFilter,
+                        SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA: IndirectNominalZeroVWeightingAddDataFilter,
                         SafetyFilterTypes.INDIRECT_ZERO: IndirectNominalZeroFilter,
                         SafetyFilterTypes.INDIRECT_STOP: IndirectNominalStopFilter,
                         SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA: IndirectNominalFixMuAddDataFilter,

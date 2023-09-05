@@ -275,6 +275,18 @@ class IndirectNominalZeroVWeightingFilter(DDSafetyFilter):
         Phi = H_future_noised @ D_inv_Huy_T @ npl.inv(H_uy_noised @ D_inv_Huy_T)
 
         return Phi
+    
+    def get_datasets_hankel_matrix(self) -> Tuple[np.matrix, np.matrix]:
+        """Return tuple of [U_p; U_f; \tilde{Y}_p] and [\tilde{Y}_f]"""
+        H_uy_noised: np.matrix = np.matrix(np.zeros(( self._p*self._lag+self._m*(self._L+self._lag),0 )))
+        H_future_noised: np.matrix = np.matrix(np.zeros(( self._p*self._L,0 )))
+        for io_data in self._io_data_list:
+            if io_data.length >= self._L+self._lag: # only use data with enough length
+                io_data.update_depth(self._L+self._lag)
+                H_uy_noised_single = np.vstack( (io_data.H_input, io_data.H_output_noised_part((0, self._lag)),) )
+                H_uy_noised = np.hstack(( H_uy_noised, H_uy_noised_single ))
+                H_future_noised = np.hstack(( H_future_noised, io_data.H_output_noised_part((self._lag, self._lag+self._L)) ))
+        return H_uy_noised, H_future_noised
 
     def fit_steady_state(self, l: int, L: int, N: int, K: int) -> Tuple[np.ndarray, np.ndarray]:
         """Return tuple of (steady state input, steady state output)

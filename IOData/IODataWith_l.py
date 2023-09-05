@@ -69,6 +69,11 @@ class IODataWith_l(IOData):
                 f_poly = [7,1]
                 self._i_block_prbs = int(length/(2**len(init_state)-1))
                 self.L = LFSR(initstate=init_state, fpoly=f_poly, counter_start_zero=False)
+            if input_rule is InputRule.PRBS_TIMES_RANDOM_MEAN:
+                init_state = [1,0,0,0,0,0,0]
+                f_poly = [7,1]
+                self._i_block_prbs = int(length/(2**len(init_state)-1))
+                self.L = LFSR(initstate=init_state, fpoly=f_poly, counter_start_zero=False)
             # if n is None:
             #     n = sys.n
             # self._n = n

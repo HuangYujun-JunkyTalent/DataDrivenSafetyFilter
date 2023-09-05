@@ -24,6 +24,7 @@ class InputRule(Enum):
     BOUNDED_RATE_WITH_MEAN = 6
     PRBS_RATE_WITH_MEAN = 7
     PRBS_WITH_MEAN = 8
+    PRBS_TIMES_RANDOM_MEAN = 9
 
     @classmethod
     @property
@@ -33,7 +34,17 @@ class InputRule(Enum):
             InputRule.MIX_WITH_MEAN,
             InputRule.BOUNDED_RATE_WITH_MEAN,
             InputRule.PRBS_RATE_WITH_MEAN,
-            InputRule.PRBS_WITH_MEAN
+            InputRule.PRBS_WITH_MEAN,
+            InputRule.PRBS_TIMES_RANDOM_MEAN,
+        )
+    
+    @classmethod
+    @property
+    def methods_with_prbs(self):
+        return (
+            InputRule.PRBS_RATE_WITH_MEAN,
+            InputRule.PRBS_WITH_MEAN,
+            InputRule.PRBS_TIMES_RANDOM_MEAN,
         )
 
 
@@ -278,7 +289,14 @@ class IOData:
             else:
                 u = -self._b_u_d[0:2]
             return u + self._mean_input
-    
+        if input_rule is InputRule.PRBS_TIMES_RANDOM_MEAN:
+            bit = self.L.outbit
+            if i % self._i_block_prbs == 0:
+                self.L.next()
+            delta_input = float(bit)*np.matrix(np.vstack( (2 * self._b_u_d[0,0] * (npr.rand(1,1)-0.5),
+                                                           2 * self._b_u_d[1,0] * (npr.rand(1,1)-0.5)) ))
+            return delta_input + self._mean_input
+            
     def add_point(self, u: np.matrix, y: np.matrix, n: np.matrix) -> None:
         self._input_data.append(u)
         self._output_data.append(y)

@@ -12,6 +12,7 @@ import numpy as np
 import numpy.linalg as npl
 from typing import List, Callable, Mapping, Union, Optional, Tuple
 from warnings import warn
+from copy import deepcopy
 
 
 class SafetyFilterForTrack:
@@ -114,8 +115,14 @@ class SafetyFilterForTrack:
             # set proper round to get proper initial l value
             a_max = system.a_max
             system.set_kinematic_model_state(self._previous_traj[-i][1], round=-t_lag*(system._v_0+a_max*t_lag))
-            error_state_no_v0 = system.state - np.array([0,0,system._v_0,0])
-            ys = np.vstack((np.matrix(error_state_no_v0[0:3]).transpose(),
+            # error_state_no_v0 = system.state - np.array([0,0,system._v_0,0])
+            error_state_no_v0 = system.state
+            error_state_no_v0[2] = error_state_no_v0[2] - system._v_0
+            if system.p == 4: #dynamic model
+                error_state_no_v0 = error_state_no_v0[:4]
+            elif system.p == 3: #kinematic model
+                error_state_no_v0 = error_state_no_v0[:3]
+            ys = np.vstack((np.matrix(error_state_no_v0).transpose(),
                             ys))
         xi_t = np.vstack((us, ys))
         self._previous_traj = [] # clear the global trajectory

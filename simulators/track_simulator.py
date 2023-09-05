@@ -15,7 +15,7 @@ from IOData.IOData import IOData, InputRule
 from IOData.IODataWith_l import IODataWith_l
 from System.ErrorKinematicAcceLATI import LinearizedErrorKinematicAcceModel, LinearizedErrorKinematicAcceModelParams, KinematicAcceModelParams, KinematicAcceModel
 from System.DynamicModel import DynamicModel, DynamicModelParams, DynamicModelFewOutput
-from System.DynamicErrorModel import DynamicErrorModelFewOutput, DynamicErrorModelParams
+from System.DynamicErrorModel import DynamicErrorModelFewOutput, DynamicErrorModelParams, DynamicErrorModelVxy
 from tools.simualtion_results import Results
 from tools.simple_track_generator import trackGenerator, arc, line
 
@@ -86,7 +86,8 @@ class TrackSimulator:
     delta_max = 0.4
     d_a_max = 27.62
     d_delta_max = 40
-    v_min, v_max = -3, 5
+    v_x_min, v_x_max = 0.05, 3.2
+    v_y_min, v_y_max = -2.0, 2.0
     mu_min, mu_max = -0.5*math.pi, 0.5*math.pi
 
     # track parameters
@@ -213,6 +214,8 @@ class TrackSimulator:
                 c=[
                     [c_i*half_track_width for c_i in c[0]],
                     [c_i*self.mu_max for c_i in c[1]],
+                    [c_i*(self.v_x_max-self.v_x_min)/2 for c_i in c[2]],
+                    [c_i*(self.v_y_max-self.v_y_min)/2 for c_i in c[3]],
                 ],
                 sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
                                     solver_args={'mosek_params':{
@@ -230,12 +233,16 @@ class TrackSimulator:
             c = kwargs.get('c', c)
             R = kwargs.get('R', R)
             epsilon = kwargs.get('epsilon', epsilon)
+            t_new_data = kwargs.get('t_new_data', 6.0)
 
             filter_params = IndirectNominalFixMuWeightingAddDataParams(
                 L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                t_new_data=t_new_data,
                 c=[
                     [c_i*half_track_width for c_i in c[0]],
                     [c_i*self.mu_max for c_i in c[1]],
+                    [c_i*(self.v_x_max-self.v_x_min)/2 for c_i in c[2]],
+                    [c_i*(self.v_y_max-self.v_y_min)/2 for c_i in c[3]],
                 ],
                 sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
                                     solver_args={'mosek_params':{
@@ -677,8 +684,8 @@ class TrackSimulator:
                     v_0 = self.v_0,
                     A_u = np.matrix('1 0; 0 1; -1 0; 0 -1'),
                     b_u = np.matrix([[self.a_max*self.m],[self.delta_max],[-self.a_min*self.m],[self.delta_max]]),
-                    A_y = np.matrix('1 0 0; 0 1 0; -1 0 0; 0 -1 0'),
-                    b_y = np.matrix([[half_track_width],[self.mu_max],[half_track_width],[-self.mu_min]]),
+                    A_y = np.matrix('1 0 0; 0 1 0; 0 0 1; -1 0 0; 0 -1 0; 0 0 -1'),
+                    b_y = np.matrix([[half_track_width],[self.mu_max],[self.v_x_max-self.v_0],[half_track_width],[-self.mu_min], [-self.v_x_min+self.v_0]]),
                     A_n = np.matrix('1 0 0; 0 1 0; 0 0 1; -1 0 0; 0 -1 0; 0 0 -1'),
                     b_n = np.matrix([[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max],[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max]]),
                 )
@@ -692,13 +699,28 @@ class TrackSimulator:
                     v_0 = self.v_0,
                     A_u = np.matrix('1 0; 0 1; -1 0; 0 -1'),
                     b_u = np.matrix([[self.a_max*self.m],[self.delta_max],[-self.a_min*self.m],[self.delta_max]]),
-                    A_y = np.matrix('1 0 0; 0 1 0; -1 0 0; 0 -1 0'),
-                    b_y = np.matrix([[half_track_width],[self.mu_max],[half_track_width],[-self.mu_min]]),
+                    A_y = np.matrix('1 0 0; 0 1 0; 0 0 1; -1 0 0; 0 -1 0; 0 0 -1'),
+                    b_y = np.matrix([[half_track_width],[self.mu_max],[self.v_x_max-self.v_0],[half_track_width],[-self.mu_min], [-self.v_x_min+self.v_0]]),
                     A_n = np.matrix('1 0 0; 0 1 0; 0 0 1; -1 0 0; 0 -1 0; 0 0 -1'),
                     b_n = np.matrix([[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max],[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max]]),
             )
             # for this system, the global initial state does not matter
             return DynamicErrorModelFewOutput(params=system_params, initial_state=np.array([0,0,0,0,0,0]))
+        elif system_type == ModelType.DYNAMIC:
+            system_params = DynamicErrorModelParams(
+                    DynamicModelParams(Ts=self.Ts, l_f=self.l_f, l_r=self.l_r, m=self.m, Iz=self.Iz, Bf=self.Bf, Cf=self.Cf, Df=self.Df, Br=self.Br, Cr=self.Cr, Dr=self.Dr, Croll=self.Croll, Cm1=self.Cm1, Cm2=self.Cm2, Cd=self.Cd),
+                    cur = cur,
+                    segment_start = start_point,
+                    v_0 = self.v_0,
+                    A_u = np.matrix('1 0; 0 1; -1 0; 0 -1'),
+                    b_u = np.matrix([[self.a_max*self.m],[self.delta_max],[-self.a_min*self.m],[self.delta_max]]),
+                    A_y = np.matrix('1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1; -1 0 0 0; 0 -1 0 0; 0 0 -1 0; 0 0 0 -1'),
+                    b_y = np.matrix([[half_track_width],[self.mu_max],[self.v_x_max-self.v_0], [self.v_y_max], [half_track_width],[-self.mu_min],[-self.v_x_min+self.v_0],[-self.v_y_min]]),
+                    A_n = np.matrix('1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1; -1 0 0 0; 0 -1 0 0; 0 0 -1 0; 0 0 0 -1'),
+                    b_n = np.matrix([[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max/1.2],[self.n_v_max/1.2],[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max/1.2],[self.n_v_max/1.2]]),
+            )
+            # for this system, the global initial state does not matter
+            return DynamicErrorModelVxy(params=system_params, initial_state=np.array([0,0,0,0,0,0]))
     
     def get_io_data_dic(self) -> Dict[float, IODataWith_l]:
         if self.use_saved_data: # use saved data
@@ -808,6 +830,15 @@ class TrackSimulator:
                                 self.n_y*(2*np.random.rand()-1),
                                 self.n_psi*(2*np.random.rand()-1),
                                 self.n_v*(2*np.random.rand()-1),
+                            ]) for _ in range(length)]
+        else:
+            return [np.array([
+                                self.n_x*(2*np.random.rand()-1),
+                                self.n_y*(2*np.random.rand()-1),
+                                self.n_psi*(2*np.random.rand()-1),
+                                self.n_v*(2*np.random.rand()-1)/1.2,
+                                self.n_v*(2*np.random.rand()-1)/1.2,
+                                0,
                             ]) for _ in range(length)]
     
     def set_params_from_dict(self, **kwargs) -> None:

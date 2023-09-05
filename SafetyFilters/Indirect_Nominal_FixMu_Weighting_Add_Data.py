@@ -158,12 +158,21 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         # terminal constraints, fix acceleration to zero, velocity to steady state value
         constraints = []
         l_terminal = self._steps
-        constraints.append(self._y[-self._p*l_terminal+2::self._p] == np.zeros((l_terminal))) # v
-        constraints.append(self._u[-self._m*l_terminal::self._m] == np.zeros((l_terminal))) # a
-        for i in range(1,l_terminal):
-            constraints.append(self._y[-self._p*i+1] == self._y[-self._p*(i+1)+1]) # mu
-            constraints.append(self._y[-self._p*i] == self._y[-self._p*(i+1)]) # e_lat 
-            constraints.append(self._u[-self._m*i+1] == self._u[-self._m*(i+1)+1]) # delta
+        if sys.p == 3: # system with few output
+            constraints.append(self._y[-self._p*l_terminal+2::self._p] == np.zeros((l_terminal))) # v
+            constraints.append(self._u[-self._m*l_terminal::self._m] == np.zeros((l_terminal))) # a
+            for i in range(1,l_terminal):
+                constraints.append(self._y[-self._p*i+1] == self._y[-self._p*(i+1)+1]) # mu
+                constraints.append(self._y[-self._p*i] == self._y[-self._p*(i+1)]) # e_lat 
+                constraints.append(self._u[-self._m*i+1] == self._u[-self._m*(i+1)+1]) # delta
+        elif sys.p == 4: # system with more output
+            constraints.append(self._y[-self._p*l_terminal+2::self._p] == np.zeros((l_terminal))) # v_x
+            constraints.append(self._u[-self._m*l_terminal::self._m] == np.zeros((l_terminal))) # throttle
+            for i in range(1,l_terminal):
+                constraints.append(self._y[-self._p*i+1] == self._y[-self._p*(i+1)+1]) # mu
+                constraints.append(self._y[-self._p*i] == self._y[-self._p*(i+1)]) # e_lat 
+                constraints.append(self._y[-self._p*i+3] == self._y[-self._p*(i+1)+3]) # v_y
+                constraints.append(self._u[-self._m*i+1] == self._u[-self._m*(i+1)+1]) # delta
 
         l_constrained = self._L
         if sys.A_y is not None:

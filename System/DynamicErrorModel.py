@@ -52,11 +52,35 @@ class DynamicErrorModel:
     @property
     def segment_start(self):
         return self.params.segment_start
+    @property
+    def v_0(self) -> float:
+        return self.params.v_0
+    @property
+    def A_y(self) -> Optional[np.matrix]:
+        return self.params.A_y
+    @property
+    def b_y(self) -> Optional[np.matrix]:  
+        return self.params.b_y
+    @property
+    def A_u(self) -> Optional[np.matrix]:
+        return self.params.A_u
+    @property
+    def b_u(self) -> Optional[np.matrix]:
+        return self.params.b_u
+    @property
+    def A_n(self) -> Optional[np.matrix]:
+        return self.params.A_n
+    @property
+    def b_n(self) -> Optional[np.matrix]:
+        return self.params.b_n
 
     dynamic_model: DynamicModel
     @property
     def Ts(self) -> float:
         return self.params.dynamic_params.Ts
+    @property
+    def kinematic_model(self):
+        return self.dynamic_model
 
     _p_Center: Optional[np.ndarray] # position of certer of circle, only valid if cur > 0
     _R: Optional[float] # radius of circle, only valid if cur > 0
@@ -157,6 +181,7 @@ class DynamicErrorModel:
 
         state_tp = self._F_c_r(x0=state_t, u=input)
         self._state = np.array(state_tp['xf']).flatten() # type and dimension conversion
+        self.dynamic_model.step(input)
         
         return state_t
     
@@ -229,8 +254,8 @@ class DynamicErrorModel:
             l = np.mod(l-round, 2*np.pi*self._R)+round # range in [round, round+2*pi*R]
             mu = yaw - s_t[2]
             mu = np.mod(mu + np.pi, 2*np.pi) - np.pi # range in [-pi, pi]
-        v_x, v_y = self.dynamic_model.state[3], self.dynamic_model.state[4]
-        yaw_rate = self.dynamic_model.state[5]
+        v_x, v_y = self.dynamic_model._state[3], self.dynamic_model._state[4]
+        yaw_rate = self.dynamic_model._state[5]
         return np.array([e_lat, mu, v_x, v_y, yaw_rate, l])
     
     def set_l_0(self, l_0: float) -> None:
@@ -341,6 +366,53 @@ class DynamicErrorModel:
                 n_array.append(2 * self.params.b_n[i,0] * (np.random.rand(1)-0.5))
             return np.matrix(n_array)
         
+class DynamicErrorModelVxy(DynamicErrorModel):
+    """Dynamic Error Model that outputs [e_lat, mu, v_x, v_y, l] as the state"""
+    _p: int # override _p in DynamicErrorModel
+    @property
+    def p(self) -> int:
+        return self._p
+    @property
+    def state(self):
+        return self._state
+    @property
+    def _v_0(self) -> float:
+        return self.params.v_0
+    @property
+    def v_0(self) -> float:
+        return self._v_0
+    
+    def __init__(self, params: DynamicErrorModelParams, initial_state: np.ndarray) -> None:
+        DynamicErrorModel.__init__(self, params, initial_state)
+        self._p = 4
+    
+    def step_lin(self, input: np.matrix) -> Tuple[np.matrix, np.matrix, np.matrix]:
+        """
+        Step the dynamic system. output state BEFORE applying the input
+        input: [throttle, steering]
+        output: ([[e_lat], [mu], [v_x], [v_y]], zeros, noise)
+        """
+        state_t = self._state
+        input = np.array(input).flatten()
+
+        state_tp = self._F_c_r(x0=state_t, u=input)
+        self._state = np.array(state_tp['xf']).flatten()
+        self.dynamic_model.step(input)
+
+        y = np.matrix(state_t[0:4]).T
+        y[2,0] = y[2,0] - self._v_0
+        n_lin = np.matrix(np.zeros((self._p, 1)))
+        n = self.get_noise()
+        
+        return y, n_lin, n
+    
+    def step(self, input: np.matrix) -> Tuple[np.matrix, np.matrix]:
+        """
+        Only outputs ([e_lat, mu, v_x, v_y], noise)
+        """
+        y, n_lin, n = self.step_lin(input)
+        return y+n_lin, n
+
 
 class DynamicErrorModelFewOutput(DynamicErrorModel):
     """Dynamic Model with only few outputs, similar to kinematic model"""
@@ -356,7 +428,7 @@ class DynamicErrorModelFewOutput(DynamicErrorModel):
         """
         Step the dynamic system. output state BEFORE applying the input
         input: [throttle, steering]
-        output: ([e_lat, mu, v], zeros, noise)
+        output: ([[e_lat], [mu], [v]], zeros, noise)
         To be compatible with Kinematic Model based on LATI class
         """
         state_t = self._state
@@ -364,6 +436,7 @@ class DynamicErrorModelFewOutput(DynamicErrorModel):
 
         state_tp = self._F_c_r(x0=state_t, u=input)
         self._state = np.array(state_tp['xf']).flatten()
+        self.dynamic_model.step(input)
 
         v = math.sqrt(state_t[2]**2 + state_t[3]**2)
         state_few = np.hstack(( state_t[0:2], np.array([v-self.params.v_0]) ))

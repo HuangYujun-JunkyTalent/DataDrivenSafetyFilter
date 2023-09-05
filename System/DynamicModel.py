@@ -29,6 +29,9 @@ class DynamicModelParams:
 
 class DynamicModel:
     _params: DynamicModelParams
+    @property
+    def Ts(self):
+        return self._params.Ts
 
     # actual state of the system
     _state: np.ndarray
@@ -42,8 +45,8 @@ class DynamicModel:
 
     # compatibality with linearized model
     m = 2
-    n = 5
-    p = 3
+    n = 6
+    p = 4
 
     def __init__(self, params: DynamicModelParams, initial_state: np.ndarray) -> None:
         """
@@ -112,7 +115,7 @@ class DynamicModelFewOutput:
 
     # compatibality with linearized model
     m = 2
-    n = 5
+    n = 6
     p = 3
 
     @property

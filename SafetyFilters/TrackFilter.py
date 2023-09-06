@@ -135,7 +135,7 @@ class SafetyFilterForTrack:
         return True if segment changed
         """
         self._systems[self._i].set_kinematic_model_state(global_state, round=-2*slack)
-        l = self._systems[self._i].state[3] # error state: [e_lat, mu, v, l]
+        l = self._systems[self._i].state[-1] # error state: [e_lat, mu, v, l] or [e_lat, mu, v_x, v_y, yaw_rate, l]
         if l > self._track_generator.chainOfSegments[self._i].length-slack:
             self._i = self._i + 1
             if self._i >= len(self._track_generator.chainOfSegments):

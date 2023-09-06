@@ -153,6 +153,7 @@ class TrackSimulator:
     systems: List[LinearizedErrorKinematicAcceModel]
     filter_params: List
     io_data_dict: Mapping[float, IODataWith_l]
+    io_data_dict_stored: Mapping[float, IODataWith_l] = {} # stored data, not modified after created
 
     def get_filter_params(self, cur: float, filter_type: SafetyFilterTypes, **kwargs):
         half_track_width = self.track_width/2
@@ -498,7 +499,11 @@ class TrackSimulator:
 
         self.systems = self.get_system_list(system_type=self.filter_model_type)
 
-        self.io_data_dict = self.get_io_data_dic()
+        if self.io_data_dict_stored:
+            self.io_data_dict = deepcopy(self.io_data_dict_stored)
+        else:
+            self.io_data_dict_stored = self.get_io_data_dic()
+            self.io_data_dict = deepcopy(self.io_data_dict_stored)
 
         if random_seed not in self.noise_list_dict.keys():
             print(f"Noise with random_seed={random_seed} not generated, generating it online")
@@ -661,6 +666,8 @@ class TrackSimulator:
         results.calculate_intervention()
         results.calculate_mean_calculation_time()
         results.calculate_sigma_infty_value()
+        if self.filter_type_list[0] in SafetyFilterTypes.output_hankel_matrix_types:
+            results.H_uy, results.H_y_future = self.filter._safety_filters[0].get_datasets_hankel_matrix()
 
         # reset parameters
         self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack

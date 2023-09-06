@@ -60,6 +60,16 @@ class SafetyFilterTypes(Enum):
         return (
             SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA,
         )
+    
+    @classmethod
+    @property
+    def output_hankel_matrix_types(self) -> Tuple[SafetyFilterTypes]:
+        return (
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING,
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA,
+            SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING,
+            SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA,
+        )
 
 
 class TrackFilterTypes(Enum):

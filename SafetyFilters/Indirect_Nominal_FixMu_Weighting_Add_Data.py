@@ -239,10 +239,10 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
                 n = np.matrix(np.zeros(y.shape))
                 self._io_data_list[-1].add_point(u, y, n)
                 is_empty = not self._io_data_list[0].remove_last_point()
-                self._new_data_count += self._steps
             if is_empty: # if a dataset is empty, remove it
                 self._io_data_list.pop(0)
                 self._first_io_data_poped = True
+            self._new_data_count += self._steps
         
         # get estimation matrix from current dataset list
         Phi = self.get_estimation_matrix(xi_t)

@@ -66,22 +66,26 @@ class Results:
         """
         self.Ts = Ts
 
-        self._input_obj = []
-        self._input_applied = []
+        self._input_obj: List[np.ndarray] = []
+        self._input_applied: List[np.ndarray] = []
 
-        self._global_trajectory = []
-        self._global_trajectory_noise = []
-        self._global_trajectory_slices = []
+        self.global_trajectory_noised: bool = False
+        self._global_trajectory: List[np.ndarray] = []
+        self._global_trajectory_noise: List[np.ndarray] = []
+        self._global_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
 
-        self._error_trajectory = []
-        self._error_trajectory_noise = []
-        self._error_trajectory_slices = []
-        self._predicted_error_trajectory_slices = []
-        self._predicted_error_with_slack_slices = []
+        self.error_trajectory_noised: bool = False # indicate whether the error trajectory is noised
+        self._error_trajectory: List[np.ndarray] = []
+        self._error_trajectory_noise: List[np.ndarray] = []
+        self._error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
+        self._predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
+        self._predicted_error_with_slack_slices: List[Tuple[float, List[np.ndarray]]] = []
 
-        self._calculation_time = []
-        self._opt_value_list = []
-        self._sigma_value_list = []
+        self._calculation_time: List[float] = []
+        self._opt_value_list: List[float] = []
+        self._sigma_value_list: List[np.ndarray] = []
+
+        self.violating_time_steps: List[float] = []
 
     def add_point(self, input_obj: np.ndarray, input_applied: np.ndarray,
                   global_state: np.ndarray, global_noise: np.ndarray,

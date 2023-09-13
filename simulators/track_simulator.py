@@ -479,11 +479,31 @@ class TrackSimulator:
         # setup needed options
         self.save_dataset_after = True
         self.stop_after_out_of_track = True
-        
-        self.random_seed = random_seed
-        results_list = []
+
         self.noise_list_dict = {}
+        self.random_seed = random_seed
         self.noise_list_dict[random_seed] = self.get_noise()
+        self.track_filter_type = track_filter_type
+        self.filter_type_list = [filter_type] # reserve for using different filter types for segments
+        self.simulation_input_type = simulation_input_type
+
+        results_list: List[Results] = []
+        
+        print("Simulating for the first time")
+        self.get_utilities_for_simualtion(random_seed, **filter_params)
+        result = self.simulate_once(random_seed, **filter_params)
+        results_list.append(result)
+
+        while len(results_list[-1].violating_time_steps) != 0 and len(results_list) < max_run_turns:
+            print("\nContinue to simulate since violated constraints last time")
+            self.out_of_track = False
+            self.get_utilities_for_simualtion(random_seed, **filter_params)
+            self.load_datasets(results_list[-1].saved_dataset_name)
+            print(f"Simulating with first dataset {[iodata.length for iodata in self.filter._safety_filters[0]._io_data_list]}")
+            result = self.simulate_once(random_seed, **filter_params)
+            results_list.append(result)
+        
+        return results_list
 
     def simulate_multi(self,
                        random_seends: List[float],
@@ -503,6 +523,7 @@ class TrackSimulator:
             dict_results[(random_seed, track_filter_type, filter_type, simulation_input_type)] = []
             print(f"\n \n Simulating random_seed={random_seed}, track_filter_type={track_filter_type}, filter_type={filter_type}, simulation_input_type={simulation_input_type}")
             for filter_param in filter_params.get(filter_type, [{}]):
+                self.get_utilities_for_simualtion(random_seed, **filter_param)
                 results = self.simulate_once(random_seed, **filter_param)
                 dict_results[(random_seed, track_filter_type, filter_type, simulation_input_type)].append(results)
         
@@ -542,34 +563,12 @@ class TrackSimulator:
 
 
     def simulate_once(self, random_seed: int, **kwargs) -> Results:
+
         self.random_seed = random_seed
         # store parameters, after single simualtion they should be restored
         Ts, L, steps, lag, slack = self.Ts, self.L, self.steps, self.lag, self.slack
     
         self.set_params_from_dict(**kwargs)
-        
-        self.track_func = {
-            'oval_track': oval_track,
-            'round_track': round_track,
-            'large_oval_track': larger_oval_track,
-        }.get(self.track_fun_name, oval_track)
-        self.track_generator = self.propogate_track_gen()
-
-        self.systems = self.get_system_list(system_type=self.filter_model_type)
-
-        if self.io_data_dict_stored:
-            self.io_data_dict = deepcopy(self.io_data_dict_stored)
-        else:
-            self.io_data_dict_stored = self.get_io_data_dic()
-            self.io_data_dict = deepcopy(self.io_data_dict_stored)
-
-        if random_seed not in self.noise_list_dict.keys():
-            print(f"Noise with random_seed={random_seed} not generated, generating it online")
-            self.noise_list = self.get_noise()
-        else:
-            self.noise_list = self.noise_list_dict[random_seed]
-
-        self.filter = self.get_filter(**kwargs)
 
         if self.filter is None:
             self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack
@@ -686,7 +685,7 @@ class TrackSimulator:
                         file_name = self.save_datasets()
                         results.saved_dataset_name = file_name
                     if self.stop_after_out_of_track:
-                        print("Stop simulation after constraint not satisfied.")
+                        print(f"Stop simulation after constraint not satisfied!")
                         results.end_simulation()
 
                         # reset parameters
@@ -733,20 +732,21 @@ class TrackSimulator:
         io_data_list_list = []
         for single_filter in self.filter._safety_filters:
             io_data_list_list.append(single_filter._io_data_list)
-        try:
-            with open(os.path.join(os.getcwd(), 'datasets', file_name), 'wb') as f:
-                pickle.dump(io_data_list_list, f)
-            return file_name
-        except RuntimeError as e:
-            print(e)
-            return None
+        with open(os.path.join(os.getcwd(), 'datasets', file_name), 'wb') as f:
+            pickle.dump(io_data_list_list, f)
+        return file_name
 
     def load_datasets(self, file_name: str) -> bool:
         """
         Load the list of current datasets from a pickle file
         Directly replace current datasets in the filter
         """
-        pass
+        with open(os.path.join(os.getcwd(), 'datasets', file_name), 'rb') as read_file:
+                io_data_list_list: List[List[IODataWith_l]] = pickle.load(read_file)
+        if len(io_data_list_list) != len(self.filter._safety_filters):
+            raise RuntimeError(f"Number of filters and io_data lists are different, cannot load datasets")
+        for single_filter, io_data_list in zip(self.filter._safety_filters, io_data_list_list):
+            single_filter._io_data_list = io_data_list
 
     def get_real_trajectory_from_proposed_buffer(self, i: int, i_seg: int, global_state: np.ndarray) -> List[np.ndarray]:
         """

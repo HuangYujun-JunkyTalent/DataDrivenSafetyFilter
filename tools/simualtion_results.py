@@ -55,6 +55,12 @@ class Results:
     major_tick_size: int = 18
     minor_tick_size: int = 10
 
+    # time_steps of violating constraints
+    violating_time_steps: List[float] = []
+    # simulation time
+    simulation_time: float = 0.0
+    saved_dataset_name: str
+
     def __init__(self, Ts: float) -> None:
         """Contrainer for simulation results and 
         """
@@ -123,6 +129,18 @@ class Results:
     
     def add_sigma_value(self, sigma_value: float) -> None:
         self._sigma_value_list.append(sigma_value)
+    
+    def end_simulation(self) -> None:
+        """Calculate everything after the simulation
+        """
+        self.simulation_time  = self.Ts * len(self._input_obj)
+        if self.simulation_time == 0:
+            print('No simulation data collected! \n')
+            return
+        self.calculate_intervention()
+        self.calculate_mean_calculation_time()
+        self.calculate_sigma_infty_value()
+        
     
     def calculate_sigma_infty_value(self) -> Tuple[float, float]:
         """Returns the minimum and maximum sigma_infty norm
@@ -216,12 +234,14 @@ class Results:
     
     def plot_predicted_error_slices(self, index: int, ax: plt.Axes,
                                     line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                    label_y_axis: bool = False) -> plt.Axes:
+                                    label_y_axis: bool = False,
+                                    time_span: List[Tuple[float, float]] = [],) -> plt.Axes:
         """Plot predicted error_state slices
         """
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._predicted_error_trajectory_slices:
-            self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+            if self.time_in_span(t, time_span):
+                self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
         if label_y_axis:
             if index == 0:
                 ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
@@ -237,10 +257,12 @@ class Results:
     
     def plot_predicted_error_with_slack_slices(self, index: int, ax: plt.Axes,
                                                line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                              label_y_axis: bool = False) -> plt.Axes:
+                                              label_y_axis: bool = False,
+                                              time_span: List[Tuple[float, float]] = [],) -> plt.Axes:
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._predicted_error_with_slack_slices:
-            self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+            if self.time_in_span(t, time_span):
+                self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
         if label_y_axis:
             if index == 0:
                 ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
@@ -256,12 +278,14 @@ class Results:
 
     def plot_error_slices(self, index: int, ax: plt.Axes,
                                     line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY_SLICE,
-                                    label_y_axis: bool = False) -> plt.Axes:
+                                    label_y_axis: bool = False,
+                                    time_span: List[Tuple[float, float]] = [],) -> plt.Axes:
         """Plot predicted error_state slices
         """
         line_style = self.get_line_style(line_style)
         for t, trajectory_slice in self._error_trajectory_slices:
-            self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
+            if self.time_in_span(t, time_span):
+                self.plot_time_sequence(ax, t, [y[index] for y in trajectory_slice], line_style)
         if label_y_axis:
             if index == 0:
                 ax.set_ylabel(r'$e_{lat}$', fontsize=self.label_size)
@@ -274,6 +298,17 @@ class Results:
         ax.plot([], [], **line_style, label='Real trajectory')
         ax.legend()
         return ax
+
+    def time_in_span(self, t: float, time_span: List[Tuple[float, float]]) -> bool:
+        """Returns true if t is in the time span
+        If time_span is empty, returns True
+        """
+        if not time_span:
+            return True
+        for start, end in time_span:
+            if t >= start and t <= end:
+                return True
+        return False
 
     def plot_time_sequence(self, ax: plt.Axes,
                            start_time: float, data: List[float],

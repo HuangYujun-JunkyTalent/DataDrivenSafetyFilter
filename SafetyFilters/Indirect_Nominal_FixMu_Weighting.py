@@ -218,8 +218,8 @@ class IndirectNominalFixMuWeightingFilter(DDSafetyFilter):
         -> Tuple[np.matrix, str, float]:
         """Return tuple of (filtered control input, status, optimal value)
         set_new_dataset: if True, creat a new dataset for next trajectories"""
-        if set_new_dataset:
-            self._io_data_list.append(IODataWith_l(depth=self._L+self._lag, n=self._n, m=self._m, p=self._p)) # create a new dataset
+        # if set_new_dataset and self._new_data_count*self._Ts < self._t_new_data:
+        #     self._io_data_list.append(IODataWith_l(depth=self._L+self._lag, n=self._n, m=self._m, p=self._p)) # create a new dataset
         
         # # add new data points, pop old data points
         # u_history = xi_t[:self._lag*self._m]

@@ -155,7 +155,8 @@ class IODataWith_l(IOData):
         try:
             self._l_data.pop(0)
         except IndexError:
-            print("This Dataset has no data for l, not poping anything.")
+            # print("This Dataset has no data for l, not poping anything.")
+            pass
         self._length -= 1
         return True
     

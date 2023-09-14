@@ -142,8 +142,10 @@ class TrackSimulator:
     buffer_y_value: List[Tuple[float,List[np.ndarray]]] = [] #[[time step, List of state],]
     buffer_sigma_value: List[Tuple[float,List[np.ndarray]]] = []
     buffer_u_value: List[Tuple[float,List[np.ndarray]]] = []
+    buffer_i_seg: List[Tuple[float,int]] = []
+    buffer_global_state: List[Tuple[float,np.ndarray]] = []
     out_of_track: bool = False # whether the car is out of track, we only want to see what happens at the first steps!
-    save_predicted_traj = True # whether to save predicted trajectory
+    save_predicted_traj_regular = True # whether to save predicted trajectory
     stop_after_out_of_track = False # whether to stop simulation after the car is out of track
     save_dataset_after = True # whether to save dataset after simulation
 
@@ -473,7 +475,7 @@ class TrackSimulator:
                                      track_filter_type: TrackFilterTypes,
                                      filter_type: SafetyFilterTypes,
                                      filter_params: Dict[str, Any],
-                                     simulation_input_type: SimulationInputRule,
+                                     simulation_input_types: List[SimulationInputRule],
                                      max_run_turns: int = 10,
                                      ) -> List[Results]:
         # setup needed options
@@ -485,23 +487,44 @@ class TrackSimulator:
         self.noise_list_dict[random_seed] = self.get_noise()
         self.track_filter_type = track_filter_type
         self.filter_type_list = [filter_type] # reserve for using different filter types for segments
-        self.simulation_input_type = simulation_input_type
+        self.simulation_input_type = simulation_input_types[0]
 
         results_list: List[Results] = []
         
         print("Simulating for the first time")
+        print(f"\nSimulating with input rule {simulation_input_types[0]}")
         self.get_utilities_for_simualtion(random_seed, **filter_params)
         result = self.simulate_once(random_seed, **filter_params)
         results_list.append(result)
-
-        while len(results_list[-1].violating_time_steps) != 0 and len(results_list) < max_run_turns:
-            print("\nContinue to simulate since violated constraints last time")
-            self.out_of_track = False
+        i = 1
+        for input_rule in simulation_input_types[1:]:
+            print(f"\nSimulating with input rule {input_rule}")
+            self.simulation_input_type = input_rule
             self.get_utilities_for_simualtion(random_seed, **filter_params)
             self.load_datasets(results_list[-1].saved_dataset_name)
-            print(f"Simulating with first dataset {[iodata.length for iodata in self.filter._safety_filters[0]._io_data_list]}")
             result = self.simulate_once(random_seed, **filter_params)
             results_list.append(result)
+            i += 1
+        all_good = True # good for all simulation input rules
+        for result in results_list[-len(simulation_input_types):]:
+            if len(result.violating_time_steps) != 0:
+                all_good = False
+                break
+        while not all_good and len(results_list) < max_run_turns:
+        # while len(results_list) < max_run_turns:
+            print("\nContinue to simulate since violated constraints last time")
+            for input_rule in simulation_input_types:
+                print(f"\nSimulating with input rule {input_rule}")
+                self.simulation_input_type = input_rule
+                self.get_utilities_for_simualtion(random_seed, **filter_params)
+                self.load_datasets(results_list[-1].saved_dataset_name)
+                result = self.simulate_once(random_seed, **filter_params)
+                results_list.append(result)
+            all_good = True # good for all simulation input rules
+            for result in results_list[-len(simulation_input_types):]:
+                if len(result.violating_time_steps) != 0:
+                    all_good = False
+                    break
         
         return results_list
 
@@ -627,6 +650,9 @@ class TrackSimulator:
                 end = timer()
             except Exception as e:
                 print(f"Exception {e} raised during optimization, returning partial results")
+                if self.save_dataset_after:
+                    file_name = self.save_datasets()
+                    results.saved_dataset_name = file_name
                 results.end_simulation()
 
                 # reset parameters
@@ -636,14 +662,16 @@ class TrackSimulator:
             results.add_opt_value(opt_i)
             i_seg = self.filter._i
             results.add_sigma_value(self.filter._safety_filters[i_seg]._sigma.value)
-            self.update_predicted_buffer(self.Ts*self.steps*i_block, self.filter_type_list[i_seg], self.filter._safety_filters[i_seg])
+            self.update_predicted_buffer(self.Ts*self.steps*i_block, self.filter_type_list[i_seg], self.filter._safety_filters[i_seg], i_seg, deepcopy(crs_model.state))
 
             # save predicted trajectory every N_slices blocks
-            if (i_block-first_block_to_save)%N_slices == 0 and self.save_predicted_traj:
+            if (i_block-first_block_to_save)%N_slices == 0 and self.save_predicted_traj_regular:
                 # get predicted outputs
                 predicted_traj, predicted_with_slack = self.get_predicted_outputs_from_buffer(-1)
+                i_seg_buffer = self.buffer_i_seg[-1][1]
+                global_initial_state = self.buffer_global_state[-1][1]
                 # get and save real output when the proposed inputs are applied
-                real_output_list = self.get_real_trajectory_from_proposed_buffer(-1, i_seg, crs_model.state)
+                real_output_list = self.get_real_trajectory_from_proposed_buffer(-1, i_seg_buffer, global_initial_state)
                 results.add_predicted_error_slice(i_block*self.steps*self.Ts, predicted_traj)
                 results.add_predicted_error_slack_slice(i_block*self.steps*self.Ts, predicted_with_slack)
                 results.add_error_slice(i_block*self.steps*self.Ts, real_output_list)
@@ -671,13 +699,16 @@ class TrackSimulator:
                 if not np.all(A*x <= b) and not self.out_of_track: # first time constraint not satisfied
                     self.out_of_track = True
                     results.violating_time_steps.append(self.Ts*(i_block*self.steps+j))
-                    index_to_save_list = [-1, -5]
+                    index_to_save_list = [-1, -5, -10]
                     print(f"Constraint not satisfied at time {self.Ts*(i_block*self.steps+j)}.")
                     for index_to_save in index_to_save_list:
+                        results.mark_time_steps.append((i_block+1+index_to_save)*self.steps-1)
                         # save predicted trajectory at previous steps
                         predicted_traj, predicted_with_slack = self.get_predicted_outputs_from_buffer(index_to_save)
+                        i_seg_buffer = self.buffer_i_seg[index_to_save][1]
+                        global_initial_state = self.buffer_global_state[index_to_save][1]
                         # get and save real output when the proposed inputs are applied
-                        real_output_list = self.get_real_trajectory_from_proposed_buffer(index_to_save, i_seg, crs_model.state)
+                        real_output_list = self.get_real_trajectory_from_proposed_buffer(index_to_save, i_seg_buffer, global_initial_state)
                         results.add_predicted_error_slice(self.buffer_u_value[index_to_save][0], predicted_traj)
                         results.add_predicted_error_slack_slice(self.buffer_u_value[index_to_save][0], predicted_with_slack)
                         results.add_error_slice(self.buffer_u_value[index_to_save][0], real_output_list)
@@ -700,6 +731,9 @@ class TrackSimulator:
                     crs_model.step(np.array(u_t).flatten())
                 except RuntimeError as e:
                     print(f"Exception {e} raised during system simulation, returning partial results")
+                    if self.save_dataset_after:
+                        file_name = self.save_datasets()
+                        results.saved_dataset_name = file_name
                     # calculate root mean square intervention and calcualtion time
                     results.end_simulation()
 
@@ -717,6 +751,9 @@ class TrackSimulator:
                                   error_dynamics_state, np.zeros(error_dynamics_state.shape),)
 
         # calculate root mean square intervention and calcualtion time
+        if self.save_dataset_after:
+            file_name = self.save_datasets()
+            results.saved_dataset_name = file_name
         results.end_simulation()
         if self.filter_type_list[0] in SafetyFilterTypes.output_hankel_matrix_types:
             results.H_uy, results.H_y_future = self.filter._safety_filters[0].get_datasets_hankel_matrix()
@@ -748,12 +785,12 @@ class TrackSimulator:
         for single_filter, io_data_list in zip(self.filter._safety_filters, io_data_list_list):
             single_filter._io_data_list = io_data_list
 
-    def get_real_trajectory_from_proposed_buffer(self, i: int, i_seg: int, global_state: np.ndarray) -> List[np.ndarray]:
+    def get_real_trajectory_from_proposed_buffer(self, i: int, i_seg: int, global_initial_state: np.ndarray) -> List[np.ndarray]:
         """
         get list of outputs if the proposed inputs are applied, with index i
         """
         sys_for_output = self.get_system(cur=self.systems[i_seg].cur, start_point=self.systems[i_seg].segment_start, system_type=self.simulate_model_type)
-        sys_for_output.set_kinematic_model_state(global_state)
+        sys_for_output.set_kinematic_model_state(global_initial_state)
         real_output_list = []
         u_proposed_list = self.buffer_u_value[i][1]
         for u in u_proposed_list:
@@ -803,7 +840,7 @@ class TrackSimulator:
         else:
             return np.split(y, self.L)
 
-    def update_predicted_buffer(self, t: float, filter_type: SafetyFilterTypes, safety_filter) -> None:
+    def update_predicted_buffer(self, t: float, filter_type: SafetyFilterTypes, safety_filter, i_seg: int, global_state: np.ndarray) -> None:
         """
         update the buffer used to store predicted trajectory and proposed inputs
         params are variables from the filter, will be separated according to the type of filter
@@ -816,10 +853,14 @@ class TrackSimulator:
             self.buffer_y_value.pop(0)
             self.buffer_u_value.pop(0)
             self.buffer_sigma_value.pop(0)
+            self.buffer_i_seg.pop(0)
+            self.buffer_global_state.pop(0)
         
         self.buffer_y_value.append( (t, self.separate_predicted_value(safety_filter._p, filter_type, y_value)) )
         self.buffer_sigma_value.append( (t, self.separate_predicted_value(safety_filter._p, filter_type, sigma_value)) )
         self.buffer_u_value.append( (t, self.separate_proposed_u(safety_filter._m, filter_type, u_value)) )
+        self.buffer_i_seg.append( (t, i_seg) )
+        self.buffer_global_state.append( (t, global_state) )
 
     def propogate_track_gen(self) -> trackGenerator:
         self.track_generator = trackGenerator(self.density, self.track_width)

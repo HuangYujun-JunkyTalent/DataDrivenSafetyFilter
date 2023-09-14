@@ -86,6 +86,7 @@ class Results:
         self._sigma_value_list: List[np.ndarray] = []
 
         self.violating_time_steps: List[float] = []
+        self.mark_time_steps: List[int] = []
 
     def add_point(self, input_obj: np.ndarray, input_applied: np.ndarray,
                   global_state: np.ndarray, global_noise: np.ndarray,
@@ -165,7 +166,8 @@ class Results:
 
     def plot_vehicle_trajectory(self, ax: plt.Axes,
                                 gen: Optional[trackGenerator] = None,
-                                line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY) -> plt.Axes:
+                                line_style: Union[PlotStyle, Dict] = PlotStyle.TRAJECTORY,
+                                plot_marked_steps: bool = True) -> plt.Axes:
         """Plots mass-center trajectory of the vehicle onto the given axe. p_x and p_y are first to elements of global_trajectory
 
         Args:
@@ -178,6 +180,11 @@ class Results:
         ax.tick_params(axis='both', which='major', labelsize=self.major_tick_size)
         ax.tick_params(axis='both', which='minor', labelsize=self.minor_tick_size)
         ax.plot([y[0] for y in self._global_trajectory], [y[1] for y in self._global_trajectory], **line_style)
+
+        if plot_marked_steps:
+            for i in self.mark_time_steps:
+                ax.scatter(self._global_trajectory[i][0], self._global_trajectory[i][1], c='red', marker='o')
+    
         ax.set_title('Vehicle trajectory', fontsize=self.title_size)
         ax.set_xlabel('x [m]', fontsize=self.label_size)
         ax.set_ylabel('y [m]', fontsize=self.label_size)

@@ -239,9 +239,9 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
                 n = np.matrix(np.zeros(y.shape))
                 self._io_data_list[-1].add_point(u, y, n)
                 is_empty = False
-                # if self._io_data_list[-1].length > self._L+self._lag:
-                #     is_empty = not self._io_data_list[0].remove_last_point()
-            if is_empty: # if a dataset is empty, remove it
+                if self._io_data_list[-1].length > self._L+self._lag:
+                    is_empty = not self._io_data_list[0].remove_last_point()
+            if self._io_data_list[0].length < self._L+self._lag: # if a dataset is empty, remove it
                 self._io_data_list.pop(0)
                 self._first_io_data_poped = True
             self._new_data_count += self._steps

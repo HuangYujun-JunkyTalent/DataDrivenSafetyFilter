@@ -492,16 +492,19 @@ class TrackSimulator:
         results_list: List[Results] = []
         
         print("Simulating for the first time")
-        print(f"\nSimulating with input rule {simulation_input_types[0]}")
         self.get_utilities_for_simualtion(random_seed, **filter_params)
+        print(f"\nSimulating with input rule {simulation_input_types[0]}")
+        print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
         result = self.simulate_once(random_seed, **filter_params)
         results_list.append(result)
         i = 1
         for input_rule in simulation_input_types[1:]:
+            self.out_of_track = False
             print(f"\nSimulating with input rule {input_rule}")
             self.simulation_input_type = input_rule
             self.get_utilities_for_simualtion(random_seed, **filter_params)
             self.load_datasets(results_list[-1].saved_dataset_name)
+            print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
             result = self.simulate_once(random_seed, **filter_params)
             results_list.append(result)
             i += 1
@@ -515,9 +518,11 @@ class TrackSimulator:
             print("\nContinue to simulate since violated constraints last time")
             for input_rule in simulation_input_types:
                 print(f"\nSimulating with input rule {input_rule}")
+                self.out_of_track = False
                 self.simulation_input_type = input_rule
                 self.get_utilities_for_simualtion(random_seed, **filter_params)
                 self.load_datasets(results_list[-1].saved_dataset_name)
+                print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
                 result = self.simulate_once(random_seed, **filter_params)
                 results_list.append(result)
             all_good = True # good for all simulation input rules

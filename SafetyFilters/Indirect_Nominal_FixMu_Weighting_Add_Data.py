@@ -239,11 +239,11 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
                 n = np.matrix(np.zeros(y.shape))
                 self._io_data_list[-1].add_point(u, y, n)
                 is_empty = False
-                if self._io_data_list[-1].length > self._L+self._lag:
-                    is_empty = not self._io_data_list[0].remove_last_point()
-            if self._io_data_list[0].length < self._L+self._lag: # if a dataset is empty, remove it
-                self._io_data_list.pop(0)
-                self._first_io_data_poped = True
+                # if self._io_data_list[-1].length > self._L+self._lag:
+                #     is_empty = not self._io_data_list[0].remove_last_point()
+            # if self._io_data_list[0].length < self._L+self._lag: # if a dataset is empty, remove it
+            #     self._io_data_list.pop(0)
+            #     self._first_io_data_poped = True
             self._new_data_count += self._steps
         
         # get estimation matrix from current dataset list
@@ -291,7 +291,7 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         delta_H_xi  = H_xi - xi_t
         d_inv_array = np.zeros((width_H,))
         for i in range(width_H):
-            d_inv_array[i] = 1 / (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
+            d_inv_array[i] = 0.2/(delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
         D_inv = np.diag(d_inv_array)
 
         # calculate the estimation matrix

@@ -35,6 +35,7 @@ class Results:
 
     error_trajectory_noised: bool = False # indicate whether the error trajectory is noised
     _error_trajectory: List[np.ndarray]
+    _segment_index_list: List[int] # index of the segment
     _error_trajectory_noise: List[np.ndarray]
     _error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
     _predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
@@ -57,6 +58,7 @@ class Results:
 
     # time_steps of violating constraints
     violating_time_steps: List[float] = []
+    mark_time_steps: List[int] = []
     # simulation time
     simulation_time: float = 0.0
     saved_dataset_name: str
@@ -76,6 +78,7 @@ class Results:
 
         self.error_trajectory_noised: bool = False # indicate whether the error trajectory is noised
         self._error_trajectory: List[np.ndarray] = []
+        self._segment_index_list: List[int] = []
         self._error_trajectory_noise: List[np.ndarray] = []
         self._error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
         self._predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
@@ -90,7 +93,8 @@ class Results:
 
     def add_point(self, input_obj: np.ndarray, input_applied: np.ndarray,
                   global_state: np.ndarray, global_noise: np.ndarray,
-                  error_state: np.ndarray, error_noise: np.ndarray) -> None:
+                  error_state: np.ndarray, error_noise: np.ndarray,
+                  segment_index: int,) -> None:
         """Adds a point to the trajectory data
         """
         self._input_obj.append(np.array(input_obj).flatten())
@@ -101,6 +105,8 @@ class Results:
 
         self._error_trajectory.append(error_state)
         self._error_trajectory_noise.append(error_noise)
+
+        self._segment_index_list.append(segment_index)
     
     def add_global_slice(self, start_time: float, global_slice: List[np.ndarray]) -> None:
         """Adds a global slice to the trajectory data

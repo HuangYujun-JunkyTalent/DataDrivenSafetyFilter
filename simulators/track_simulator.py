@@ -753,7 +753,8 @@ class TrackSimulator:
                 # save to results and trajectory, for initial condition of filter later
                 results.add_point(u_obj_t, u_t, 
                                   global_state, self.noise_list[i_steps+self.lag], 
-                                  error_dynamics_state, np.zeros(error_dynamics_state.shape),)
+                                  error_dynamics_state, np.zeros(error_dynamics_state.shape),
+                                  i_seg,)
 
         # calculate root mean square intervention and calcualtion time
         if self.save_dataset_after:

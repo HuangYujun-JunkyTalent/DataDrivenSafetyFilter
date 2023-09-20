@@ -40,6 +40,7 @@ class Results:
     _error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
     _predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices, (start time, trajectory)
     _predicted_error_with_slack_slices: List[Tuple[float, List[np.ndarray]]] # trajectory slices added with slack varialbes, (start time, trajectory)
+    _proposed_input_slices: List[Tuple[float, List[np.ndarray]]] = [] # proposed input slices, (start time, trajectory)
 
     _calculation_time: List[float]
     _opt_value_list: List[float]
@@ -83,6 +84,7 @@ class Results:
         self._error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
         self._predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
         self._predicted_error_with_slack_slices: List[Tuple[float, List[np.ndarray]]] = []
+        self._proposed_input_slices: List[Tuple[float, List[np.ndarray]]] = []
 
         self._calculation_time: List[float] = []
         self._opt_value_list: List[float] = []

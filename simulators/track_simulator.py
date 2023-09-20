@@ -717,6 +717,7 @@ class TrackSimulator:
                         results.add_predicted_error_slice(self.buffer_u_value[index_to_save][0], predicted_traj)
                         results.add_predicted_error_slack_slice(self.buffer_u_value[index_to_save][0], predicted_with_slack)
                         results.add_error_slice(self.buffer_u_value[index_to_save][0], real_output_list)
+                        results._proposed_input_slices.append(self.buffer_u_value[index_to_save])
                     if self.save_dataset_after:
                         file_name = self.save_datasets()
                         results.saved_dataset_name = file_name
@@ -770,7 +771,7 @@ class TrackSimulator:
     
     def save_datasets(self) -> Optional[str]:
         """Save the list of current datasets to a pickle file"""
-        time = f"{datetime.datetime.now():%m-%d_%H_%M}"
+        time = f"{datetime.datetime.now():%m-%d-%H-%M-%S}"
         file_name = time + "-" + self.track_fun_name + "-" + self.filter_type_list[0].name + ".pkl"
         io_data_list_list = []
         for single_filter in self.filter._safety_filters:

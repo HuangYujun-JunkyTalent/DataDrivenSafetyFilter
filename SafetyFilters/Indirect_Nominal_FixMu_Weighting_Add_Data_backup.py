@@ -135,8 +135,7 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         self._objective = cp.quad_form(self._u[0:self._m*(self._steps)]-self._u_obj, R_n)  # error term 
         # obj = obj + self._epsilon*self._lam_alph * cp.norm(self._alpha, 2) # penalty term
         # obj = obj + self._lam_sig * cp.norm(self._sigma, 2) # penalty term
-        # self._objective = self._objective + self._lam_sig * cp.sum_squares(self._sigma) # penalty term
-        self._objective = self._objective + self._lam_sig * cp.norm_inf(self._sigma) # penalty term
+        self._objective = self._objective + self._lam_sig * cp.sum_squares(self._sigma) # penalty term
         self._objective = cp.Minimize(self._objective)
 
         # constraints
@@ -240,8 +239,8 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
                 n = np.matrix(np.zeros(y.shape))
                 self._io_data_list[-1].add_point(u, y, n)
                 is_empty = False
-                # if self._io_data_list[-1].length > self._L+self._lag:
-                #     is_empty = not self._io_data_list[0].remove_last_point()
+            #     if self._io_data_list[-1].length > self._L+self._lag:
+            #         is_empty = not self._io_data_list[0].remove_last_point()
             # if self._io_data_list[0].length < self._L+self._lag: # if a dataset is empty, remove it
             #     self._io_data_list.pop(0)
             #     self._first_io_data_poped = True
@@ -290,16 +289,9 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         W_xi = np.matrix(np.eye(self._lag*self._m + self._lag*self._p)) # used for calculating weights of xi_t distance, can be a hyper-parameter to be learned!
         H_xi = np.vstack(( H_uy_noised[:self._lag*self._m,:],H_uy_noised[-self._lag*self._p-1:-1,:] ))
         delta_H_xi  = H_xi - xi_t
-        d_array = np.zeros((width_H,))
-        for i in range(width_H):
-            d_array[i] = (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
-        r_range = max(4, np.partition(d_array, 400)[400])
         d_inv_array = np.zeros((width_H,))
         for i in range(width_H):
-            if d_array[i] < r_range:
-                d_inv_array[i] = np.exp(-d_array[i])
-            else:
-                d_inv_array[i] = 0
+            d_inv_array[i] = 1/(delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
         D_inv = np.diag(d_inv_array)
 
         # calculate the estimation matrix

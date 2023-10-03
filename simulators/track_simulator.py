@@ -248,9 +248,18 @@ class TrackSimulator:
             t_new_data = kwargs.get('t_new_data', 6.0)
             c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
 
+            min_dist = kwargs.get('min_dist', 0.1)
+            min_num_slices = kwargs.get('min_num_slices', 300)
+            min_portion_slices = kwargs.get('min_portion_slices', 0.5)
+            f = kwargs.get('f', lambda x: 1/x**2)
+
             filter_params = IndirectNominalFixMuWeightingAddDataParams(
                 L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
                 t_new_data=t_new_data,
+                min_dist=min_dist,
+                min_num_slices=min_num_slices,
+                min_portion_slices=min_portion_slices,
+                f = f,
                 c=[
                     [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
                 ],
@@ -706,18 +715,21 @@ class TrackSimulator:
                     results.violating_time_steps.append(self.Ts*(i_block*self.steps+j))
                     index_to_save_list = [-1, -5, -10]
                     print(f"Constraint not satisfied at time {self.Ts*(i_block*self.steps+j)}.")
-                    for index_to_save in index_to_save_list:
-                        results.mark_time_steps.append((i_block+1+index_to_save)*self.steps-1)
-                        # save predicted trajectory at previous steps
-                        predicted_traj, predicted_with_slack = self.get_predicted_outputs_from_buffer(index_to_save)
-                        i_seg_buffer = self.buffer_i_seg[index_to_save][1]
-                        global_initial_state = self.buffer_global_state[index_to_save][1]
-                        # get and save real output when the proposed inputs are applied
-                        real_output_list = self.get_real_trajectory_from_proposed_buffer(index_to_save, i_seg_buffer, global_initial_state)
-                        results.add_predicted_error_slice(self.buffer_u_value[index_to_save][0], predicted_traj)
-                        results.add_predicted_error_slack_slice(self.buffer_u_value[index_to_save][0], predicted_with_slack)
-                        results.add_error_slice(self.buffer_u_value[index_to_save][0], real_output_list)
-                        results._proposed_input_slices.append(self.buffer_u_value[index_to_save])
+                    try:
+                        for index_to_save in index_to_save_list:
+                            results.mark_time_steps.append((i_block+1+index_to_save)*self.steps-1)
+                            # save predicted trajectory at previous steps
+                            predicted_traj, predicted_with_slack = self.get_predicted_outputs_from_buffer(index_to_save)
+                            i_seg_buffer = self.buffer_i_seg[index_to_save][1]
+                            global_initial_state = self.buffer_global_state[index_to_save][1]
+                            # get and save real output when the proposed inputs are applied
+                            real_output_list = self.get_real_trajectory_from_proposed_buffer(index_to_save, i_seg_buffer, global_initial_state)
+                            results.add_predicted_error_slice(self.buffer_u_value[index_to_save][0], predicted_traj)
+                            results.add_predicted_error_slack_slice(self.buffer_u_value[index_to_save][0], predicted_with_slack)
+                            results.add_error_slice(self.buffer_u_value[index_to_save][0], real_output_list)
+                            results._proposed_input_slices.append(self.buffer_u_value[index_to_save])
+                    except Exception as e:
+                        print(f"Exception {e} raised during saving constraint violation history.")
                     if self.save_dataset_after:
                         file_name = self.save_datasets()
                         results.saved_dataset_name = file_name

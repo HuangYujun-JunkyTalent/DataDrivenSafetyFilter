@@ -4,7 +4,7 @@ from scipy.linalg import block_diag
 import cvxpy as cp
 import pytope as pt
 
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Callable, Optional
 from dataclasses import dataclass
 from itertools import accumulate
 from warnings import warn
@@ -27,6 +27,12 @@ class IndirectNominalFixMuWeightingAddDataParams:
     epsilon: float
     c: List[List[float]]
     t_new_data: float = 6.0
+
+    W_xi: np.matrix = np.matrix(np.eye(1))
+    min_dist: float = 0.1
+    min_num_slices: int = 300
+    min_portion_slices: float = 0.1
+    f: Callable[[float], float] = lambda x: 1/x**2
     # steady_input: Optional[np.ndarray] = None
     # steady_output: Optional[np.ndarray] = None
     sf_params: SFParams = SFParams()
@@ -44,6 +50,11 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
     _epsilon: float # noise level
     _R: np.matrix
     _c_sum: List[List[float]] # tightening constants
+
+    y_max: np.ndarray # maximum output
+    y_min: np.ndarray # minimum output
+    u_max: np.ndarray # maximum input
+    u_min: np.ndarray # minimum input
 
     _u_s: np.ndarray # steasy state input
     _y_s: np.ndarray # steasy state output, estimated from data
@@ -79,6 +90,16 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         self._m = sys.m
         self._p = sys.p
         self._n = sys.n
+
+        self.y_max = np.array(sys.b_y[:sys.p]).flatten()
+        self.y_min = -np.array(sys.b_y[sys.p:2*sys.p]).flatten()
+        self.u_max = np.array(sys.b_u[:sys.m]).flatten()
+        self.u_min = -np.array(sys.b_u[sys.m:2*sys.m]).flatten()
+        self.min_num_slices = params.min_num_slices
+        self.min_portion_slices = params.min_portion_slices
+        self.min_dist = params.min_dist
+        self.f = params.f
+
         self._L = L
         self._Ts = sys.Ts
         self._t_new_data = params.t_new_data
@@ -287,17 +308,21 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         H_uy_noised: np.matrix = np.vstack( (H_uy_noised, np.ones((1, width_H))) )
         
         # calculate weights for each data segment
-        W_xi = np.matrix(np.eye(self._lag*self._m + self._lag*self._p)) # used for calculating weights of xi_t distance, can be a hyper-parameter to be learned!
+        size_y = self.y_max-self.y_min
+        size_u = self.u_max-self.u_min
+        # W_xi = np.matrix(np.eye(self._lag*self._m + self._lag*self._p)) # used for calculating weights of xi_t distance, can be a hyper-parameter to be learned!
+        W_xi = np.matrix(np.diag(np.hstack((1/size_u**2,)*self._lag + (1/size_y**2,)*self._lag)))
         H_xi = np.vstack(( H_uy_noised[:self._lag*self._m,:],H_uy_noised[-self._lag*self._p-1:-1,:] ))
         delta_H_xi  = H_xi - xi_t
         d_array = np.zeros((width_H,))
         for i in range(width_H):
             d_array[i] = (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
-        r_range = max(4, np.partition(d_array, 400)[400])
+        num = max(self.min_num_slices, int(width_H*self.min_portion_slices))
+        r_range = max(self.min_dist, np.partition(d_array, num)[num])
         d_inv_array = np.zeros((width_H,))
         for i in range(width_H):
             if d_array[i] < r_range:
-                d_inv_array[i] = 1/d_array[i]
+                d_inv_array[i] = self.f(d_array[i])
             else:
                 d_inv_array[i] = 0
         D_inv = np.diag(d_inv_array)

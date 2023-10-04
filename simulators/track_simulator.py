@@ -148,6 +148,7 @@ class TrackSimulator:
     save_predicted_traj_regular = True # whether to save predicted trajectory
     stop_after_out_of_track = False # whether to stop simulation after the car is out of track
     save_dataset_after = True # whether to save dataset after simulation
+    delete_dataset_after = True # whether to delete dataset after reading it
 
     # filter parameters, those are important also for simulation
     filter_model_type = ModelType.KINEMATIC
@@ -705,8 +706,8 @@ class TrackSimulator:
                 u_t = u_i[j*self.systems[i_seg].m:(j+1)*self.systems[i_seg].m]
 
                 # if constraint not satisfied, save predicted values at previous steps
-                A = self.systems[i_seg].A_y
-                b = self.systems[i_seg].b_y
+                A = self.systems[i_seg].A_y[::self.systems[i_seg].p] # only take e_lat
+                b = self.systems[i_seg].b_y[::self.systems[i_seg].p]
                 x = np.matrix(self.systems[i_seg].state).T
                 x = x[:self.filter._safety_filters[i_seg]._p]
                 x[2] = x[2] - self.v_0 # from actual velocity to deviation from steady state
@@ -803,6 +804,8 @@ class TrackSimulator:
             raise RuntimeError(f"Number of filters and io_data lists are different, cannot load datasets")
         for single_filter, io_data_list in zip(self.filter._safety_filters, io_data_list_list):
             single_filter._io_data_list = io_data_list
+        if self.delete_dataset_after:
+            os.remove(os.path.join(os.getcwd(), 'datasets', file_name))
 
     def get_real_trajectory_from_proposed_buffer(self, i: int, i_seg: int, global_initial_state: np.ndarray) -> List[np.ndarray]:
         """

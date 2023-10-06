@@ -913,7 +913,9 @@ class TrackSimulator:
             elif self.simulation_input_type == SimulationInputRule.MAX_THROTTLE:
                 u_obj_k = np.matrix([[throttle_sim],[0]])
             elif self.simulation_input_type == SimulationInputRule.SINE_WITH_MEAN:
-                u_obj_k = np.matrix([[0.8*throttle_sim + throttle_sim*math.sin(t_j*math.pi)],[self.delta_sim*math.sin(t_j*math.pi)]])
+                u_obj_k = np.matrix([
+                    [0.4*throttle_sim + throttle_sim*math.sin(5*t_j*math.pi)],
+                    [self.delta_sim*math.sin(13*t_j*math.pi)]])
             u_obj = np.vstack( (u_obj, u_obj_k) )
         return u_obj
     

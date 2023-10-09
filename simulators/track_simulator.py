@@ -480,6 +480,71 @@ class TrackSimulator:
                         }.get(filter_type, IndirectNominalFittingFilter)
         return FilterClass(system, io_data, params)
     
+    def simulate_with_separate_collection(self,
+                                        random_seed: int,
+                                        track_filter_type: TrackFilterTypes,
+                                        filter_type: SafetyFilterTypes,
+                                        filter_params: Dict[str, Any],
+                                        collection_input_type: SimulationInputRule,
+                                        simulation_input_types: List[SimulationInputRule],
+                                        max_run_turns: int = 10,
+                                        ) -> List[Results]:
+        """Simulate with separate data-collection and filtering steps."""
+        # setup needed options
+        self.stop_after_out_of_track = True
+
+        self.noise_list_dict = {}
+        self.random_seed = random_seed
+        self.noise_list_dict[random_seed] = self.get_noise()
+        self.track_filter_type = track_filter_type
+        self.filter_type_list = [filter_type] # reserve for using different filter types for segments
+
+        results_list: List[Results] = []
+        
+        print("Collecting data for the first time")
+        self.get_utilities_for_simualtion(random_seed, **filter_params)
+        print(f"\nSimulating with input rule {collection_input_type}")
+        self.save_dataset_after = True
+        self.simulation_input_type = collection_input_type
+        print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
+        dataset_result = self.simulate_once(random_seed, **filter_params)
+        results_list.append(dataset_result)
+
+        all_good = False
+        while not all_good and len(results_list) < max_run_turns*(len(simulation_input_types)+1):
+        # while len(results_list) < max_run_turns:
+            print("\nContinue to simulate")
+            for input_rule in simulation_input_types:
+                print(f"\nSimulating with input rule {input_rule}")
+                self.out_of_track = False
+                self.save_dataset_after = False
+                self.simulation_input_type = input_rule
+                self.get_utilities_for_simualtion(random_seed, **filter_params)
+                self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
+                print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
+                result = self.simulate_once(random_seed, **filter_params)
+                results_list.append(result)
+            all_good = True # whether constraints not violated for all simulation input rules
+            for result in results_list[-len(simulation_input_types):]:
+                if len(result.violating_time_steps) != 0:
+                    all_good = False
+                    if len(results_list) < max_run_turns*(len(simulation_input_types)+1):
+                        # collect new datasets with proper input rule
+                        print(f"\nCollecting dataset with input rule {collection_input_type}. \n")
+                        self.out_of_track = False
+                        self.save_dataset_after = True
+                        self.simulation_input_type = collection_input_type
+                        self.get_utilities_for_simualtion(random_seed, **filter_params)
+                        self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=True)
+                        print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
+                        dataset_result = self.simulate_once(random_seed, **filter_params)
+                        results_list.append(dataset_result)
+                    break
+        
+        print(f"\nConcluding simulation, with {len(results_list)} results collected.\n")
+
+        return results_list
+
     def simulate_with_dataset_update(self,
                                      random_seed: int,
                                      track_filter_type: TrackFilterTypes,
@@ -598,7 +663,6 @@ class TrackSimulator:
 
         self.filter = self.get_filter(**kwargs)
         self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack
-
 
     def simulate_once(self, random_seed: int, **kwargs) -> Results:
 
@@ -793,7 +857,7 @@ class TrackSimulator:
             pickle.dump(io_data_list_list, f)
         return file_name
 
-    def load_datasets(self, file_name: str) -> bool:
+    def load_datasets(self, file_name: str, delete_after_load: bool = True) -> bool:
         """
         Load the list of current datasets from a pickle file
         Directly replace current datasets in the filter
@@ -804,7 +868,7 @@ class TrackSimulator:
             raise RuntimeError(f"Number of filters and io_data lists are different, cannot load datasets")
         for single_filter, io_data_list in zip(self.filter._safety_filters, io_data_list_list):
             single_filter._io_data_list = io_data_list
-        if self.delete_dataset_after:
+        if self.delete_dataset_after and delete_after_load:
             os.remove(os.path.join(os.getcwd(), 'datasets', file_name))
 
     def get_real_trajectory_from_proposed_buffer(self, i: int, i_seg: int, global_initial_state: np.ndarray) -> List[np.ndarray]:
@@ -914,8 +978,18 @@ class TrackSimulator:
                 u_obj_k = np.matrix([[throttle_sim],[0]])
             elif self.simulation_input_type == SimulationInputRule.SINE_WITH_MEAN:
                 u_obj_k = np.matrix([
-                    [0.4*throttle_sim + throttle_sim*math.sin(5*t_j*math.pi)],
-                    [self.delta_sim*math.sin(13*t_j*math.pi)]])
+                    [0.4*throttle_sim + throttle_sim*math.sin(t_j*math.pi)],
+                    [self.delta_sim*math.sin(t_j*math.pi)]])
+            elif self.simulation_input_type == SimulationInputRule.SINE_WITH_MEAN_RANDOM:
+                # if t_j==0:
+                if True:
+                    self.phi_delta = 0.5*math.pi*np.random.rand()
+                    self.phi_tau = 0.5*math.pi*np.random.rand()
+                    self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_tau = 2*np.pi*np.random.rand() + 2*np.pi
+                u_obj_k = np.matrix([
+                    [0.4*throttle_sim + throttle_sim*math.sin(t_j*self.omega_tau + self.phi_tau)],
+                    [self.delta_sim*math.sin(t_j*self.omega_delta + self.phi_delta)]])
             u_obj = np.vstack( (u_obj, u_obj_k) )
         return u_obj
     

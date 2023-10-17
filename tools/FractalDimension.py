@@ -80,11 +80,11 @@ def fractal_dimension(
     if plot:
         fig, ax = plt.subplots(figsize = (8,6))
         ax.scatter(np.log2(1/scales), np.log2(np.unique(Ns)), c = "teal", label = "Measured ratios")
-        ax.set_ylabel("$\log2 N(\epsilon)$")
-        ax.set_xlabel("$\log2 1/ \epsilon$")
-        fitted_y_vals = np.polyval(coeffs, np.log2(1/scales))
-        ax.plot(np.log2(1/scales), fitted_y_vals, "k--", label = f"Fit: {np.round(coeffs[0],3)}X+{coeffs[1]}")
-        ax.legend()
+        ax.set_ylabel(r"$\log_2 N(\epsilon)$")
+        ax.set_xlabel(r"$\log_2 1/ \epsilon$")
+        # fitted_y_vals = np.polyval(coeffs, np.log2(1/scales))
+        # ax.plot(np.log2(1/scales), fitted_y_vals, "k--", label = f"Fit: {np.round(coeffs[0],3)}X+{coeffs[1]}")
+        # ax.legend()
     
     return coeffs[0], np.log2(Ns), np.log2(1/scales)
     

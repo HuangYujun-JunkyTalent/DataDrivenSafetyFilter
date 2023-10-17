@@ -502,6 +502,7 @@ class TrackSimulator:
         results_list: List[Results] = []
         
         print("Collecting data for the first time")
+        self.stop_after_out_of_track = True
         self.get_utilities_for_simualtion(random_seed, **filter_params)
         print(f"\nSimulating with input rule {collection_input_type}")
         self.save_dataset_after = True
@@ -516,6 +517,7 @@ class TrackSimulator:
             print("\nContinue to simulate")
             for input_rule in simulation_input_types:
                 print(f"\nSimulating with input rule {input_rule}")
+                self.stop_after_out_of_track = False
                 self.out_of_track = False
                 self.save_dataset_after = False
                 self.simulation_input_type = input_rule
@@ -531,6 +533,7 @@ class TrackSimulator:
                     if len(results_list) < max_run_turns*(len(simulation_input_types)+1):
                         # collect new datasets with proper input rule
                         print(f"\nCollecting dataset with input rule {collection_input_type}. \n")
+                        self.stop_after_out_of_track = True
                         self.out_of_track = False
                         self.save_dataset_after = True
                         self.simulation_input_type = collection_input_type
@@ -981,8 +984,8 @@ class TrackSimulator:
                     [0.4*throttle_sim + throttle_sim*math.sin(t_j*math.pi)],
                     [self.delta_sim*math.sin(t_j*math.pi)]])
             elif self.simulation_input_type == SimulationInputRule.SINE_WITH_MEAN_RANDOM:
-                # if t_j==0:
-                if True:
+                if t_j==0:
+                # if True:
                     self.phi_delta = 0.5*math.pi*np.random.rand()
                     self.phi_tau = 0.5*math.pi*np.random.rand()
                     self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi

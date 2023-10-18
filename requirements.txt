@@ -1,0 +1,9 @@
+numpy
+matplotlib
+scipy
+cvxpy
+mosek
+casadi
+pylfsr
+pytope
+oyaml==0.9

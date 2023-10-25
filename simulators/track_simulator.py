@@ -500,8 +500,22 @@ class TrackSimulator:
         self.filter_type_list = [filter_type] # reserve for using different filter types for segments
 
         results_list: List[Results] = []
-        
-        print("Collecting data for the first time")
+
+        print("\nRunning with initial dataset")
+        empty_result = Results(Ts = self.Ts)
+        results_list.append(empty_result)
+        for input_rule in simulation_input_types:
+            print(f"\nSimulating with input rule {input_rule}")
+            self.stop_after_out_of_track = False
+            self.out_of_track = False
+            self.save_dataset_after = False
+            self.simulation_input_type = input_rule
+            self.get_utilities_for_simualtion(random_seed, **filter_params)
+            print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
+            result = self.simulate_once(random_seed, **filter_params)
+            results_list.append(result)
+
+        print("\nCollecting data for the first time")
         self.stop_after_out_of_track = True
         self.get_utilities_for_simualtion(random_seed, **filter_params)
         print(f"\nSimulating with input rule {collection_input_type}")
@@ -538,7 +552,7 @@ class TrackSimulator:
                         self.save_dataset_after = True
                         self.simulation_input_type = collection_input_type
                         self.get_utilities_for_simualtion(random_seed, **filter_params)
-                        self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=True)
+                        self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
                         dataset_result = self.simulate_once(random_seed, **filter_params)
                         results_list.append(dataset_result)
@@ -993,6 +1007,10 @@ class TrackSimulator:
                 u_obj_k = np.matrix([
                     [0.4*throttle_sim + throttle_sim*math.sin(t_j*self.omega_tau + self.phi_tau)],
                     [self.delta_sim*math.sin(t_j*self.omega_delta + self.phi_delta)]])
+            elif self.simulation_input_type == SimulationInputRule.RANDOM_WITH_MEAN:
+                u_obj_k = np.matrix([
+                    [0.4*throttle_sim + throttle_sim*np.random.rand()],
+                    [self.delta_sim*np.random.rand()]])
             u_obj = np.vstack( (u_obj, u_obj_k) )
         return u_obj
     

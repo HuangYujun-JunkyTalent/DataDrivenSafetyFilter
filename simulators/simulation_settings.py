@@ -85,6 +85,7 @@ class SimulationInputRule(Enum):
     MAX_THROTTLE = 3
     SINE_WITH_MEAN = 4
     SINE_WITH_MEAN_RANDOM = 5
+    RANDOM_WITH_MEAN = 6
 
 
 class ModelType(Enum):

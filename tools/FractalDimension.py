@@ -7,7 +7,7 @@ Created on Mon Sep 16 09:47:15 2019
 
 Modified by Yujun Huang, to deal with general shape/non-integer samples
 """
-from typing import Tuple
+from typing import Tuple, List
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -87,4 +87,26 @@ def fractal_dimension(
         # ax.legend()
     
     return coeffs[0], np.log2(Ns), np.log2(1/scales)
+
+
+def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarray, region_max: np.ndarray, n_offsets: float = 0, ax = None):
+    """Plots the squares used to cover all the locs as in fractal_dimension method.
+    Args:
+        locs_list (List[np.ndarray]): list of locations where the graph is marked as 1.
+        scale: scale of the box size, in log2 scale. 
+        region_min (np.ndarray): minimum values of the region of interest.
+        region_max (np.ndarray): maximum values of the region of interest.
+        n_offsets: use this many offsets to find the smallest set N(s) to cover all locs.
+        ax (matplotlib.axes.Axes): axes to plot on. If None, a new figure is created.
+    """
+    if ax == None:
+        fig, ax = plt.subplots(figsize = (8,6))
+    for locs in locs_list:
+        ax.plot(locs[:,0], locs[:,1], color = "tab:blue")
+    ax.set_xlim(region_min[0], region_max[0])
+    ax.set_ylim(region_min[1], region_max[1])
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+
+    all_locs = np.vstack(locs_list)
     

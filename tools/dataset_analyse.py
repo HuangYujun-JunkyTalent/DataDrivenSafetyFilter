@@ -34,6 +34,20 @@ def get_datasets_hankel_matrix(io_data_list: List[IODataWith_l], lag: int, L: in
             H_future_noised = np.hstack(( H_future_noised, io_data.H_output_noised_part((lag, lag+L)) ))
     return H_uy_noised, H_future_noised
 
+def get_datasets_hankel_matrix_list(io_data_list: List[IODataWith_l], lag: int, L: int) -> Tuple[List[np.matrix], List[np.matrix]]:
+    """Return tuple of [U_p; U_f; \tilde{Y}_p] and [\tilde{Y}_f] for each dataset"""
+    p = io_data_list[0]._output_data[0].shape[0]
+    m = io_data_list[0]._input_data[0].shape[0]
+    H_uy_noised_list: List[np.matrix] = []
+    H_future_noised_list: List[np.matrix] = []
+    for io_data in io_data_list:
+        if io_data.length >= L+lag: # only use data with enough length
+            io_data.update_depth(L+lag)
+            H_uy_noised_single = np.vstack( (io_data.H_input, io_data.H_output_noised_part((0, lag)),) )
+            H_uy_noised_list.append(H_uy_noised_single)
+            H_future_noised_list.append(io_data.H_output_noised_part((lag, lag+L)))
+    return H_uy_noised_list, H_future_noised_list
+
 
 def weighting_xi_in_datasets(
         W_xi: np.matrix, f: Callable[[float], float], io_data_list: List[IODataWith_l], lag: int, L: int,

@@ -49,6 +49,15 @@ def get_datasets_hankel_matrix_list(io_data_list: List[IODataWith_l], lag: int, 
     return H_uy_noised_list, H_future_noised_list
 
 
+def normalize_locs_list(locs_list: List[np.ndarray], region_min: np.ndarray, region_max: np.ndarray) -> List[np.ndarray]:
+    normalized_locs_list = []
+    middle = (region_max + region_min)/2
+    for locs in locs_list:
+        normalized_locs = (locs - middle)/(region_max - region_min)
+        normalized_locs_list.append(normalized_locs)
+    return normalized_locs_list
+
+
 def weighting_xi_in_datasets(
         W_xi: np.matrix, f: Callable[[float], float], io_data_list: List[IODataWith_l], lag: int, L: int,
         l_p: int, l_f: int, xi: np.ndarray,
@@ -95,6 +104,7 @@ def weighting_u_pf_y_p_in_datasets(
 class Sampler:
     l_p: int = 1
     l_f: int = 1
+
     a_min, a_max = -1.1, 5.5
     delta_max = 0.4
     v_0 = 1.0
@@ -102,6 +112,7 @@ class Sampler:
     v_y_min, v_y_max = -2.0, 2.0
     mu_min, mu_max = -0.5*np.pi, 0.5*np.pi
     track_width = 0.5
+    phi_rate_min, phi_rate_max = -4.0, 4.0
 
     def xi_iterator(self) -> Iterable[np.ndarray]:
         u_min = np.array([self.a_min, -self.delta_max])
@@ -126,3 +137,10 @@ class Sampler:
 
         while True:
             yield(np.random.uniform(x_min, x_max))
+    
+    def state_iterator(self) -> Iterable[np.ndarray]:
+        """Sample state from uniform distribution, also includes the always zero l (progress along the track)"""
+        y_min = np.array([-self.track_width, self.mu_min, self.delta_v_x_min, self.v_y_min, self.phi_rate_min, 0.0])
+        y_max = np.array([self.track_width, self.mu_max, self.delta_v_x_max, self.v_y_max, self.phi_rate_max, 0.0])
+        while True:
+            yield(np.random.uniform(y_min, y_max))

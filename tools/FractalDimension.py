@@ -46,7 +46,7 @@ def fractal_dimension(
         locs: np.ndarray, region_min: np.ndarray, region_max: np.ndarray,
         max_box_size: float = None, min_box_size: float = -3.0,
         n_samples: int = 20, n_offsets: float = 0, plot = False,
-        plot_fitting = False,) -> Tuple[float, np.ndarray, np.ndarray]:
+        plot_fitting = False, ax = None) -> Tuple[float, np.ndarray, np.ndarray]:
     """Calculates the fractal dimension of a 3D numpy array.
     Returns: 
         float: the fractal dimension
@@ -109,7 +109,8 @@ def fractal_dimension(
     
     #make plot
     if plot:
-        fig, ax = plt.subplots(figsize = (8,6))
+        if ax == None:
+            fig, ax = plt.subplots(figsize = (8,6))
         ax.scatter(np.log2(1/scales), np.log2(np.unique(Ns)), c = "teal", label = "Measured ratios")
         ax.set_ylabel(r"$\log_2 N(\epsilon)$")
         ax.set_xlabel(r"$\log_2 1/ \epsilon$")

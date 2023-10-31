@@ -45,7 +45,8 @@ def local_fractal_dimension(locs_list: List[np.ndarray],
 def fractal_dimension(
         locs: np.ndarray, region_min: np.ndarray, region_max: np.ndarray,
         max_box_size: float = None, min_box_size: float = -3.0,
-        n_samples: int = 20, n_offsets: float = 0, plot = False) -> Tuple[float, np.ndarray, np.ndarray]:
+        n_samples: int = 20, n_offsets: float = 0, plot = False,
+        plot_fitting = False,) -> Tuple[float, np.ndarray, np.ndarray]:
     """Calculates the fractal dimension of a 3D numpy array.
     Returns: 
         float: the fractal dimension
@@ -113,11 +114,24 @@ def fractal_dimension(
         ax.set_ylabel(r"$\log_2 N(\epsilon)$")
         ax.set_xlabel(r"$\log_2 1/ \epsilon$")
         fitted_y_vals = np.polyval(coeffs, np.log2(1/scales))
-        ax.plot(np.log2(1/scales), fitted_y_vals, "k--", label = f"Fit: {np.round(coeffs[0],3)}X+{coeffs[1]}")
+        if plot_fitting:
+            ax.plot(np.log2(1/scales), fitted_y_vals, "k--", label = f"Fit: {np.round(coeffs[0],3)}X+{coeffs[1]}")
         ax.legend()
     
     return coeffs[0], np.log2(Ns), np.log2(1/scales)
 
+def plot_locs_list(locs_list: List[np.ndarray], ax = None):
+    """Plots the locs_list as a scatter plot.
+    Args:
+        locs_list (List[np.ndarray]): list of locations where the graph is marked as 1.
+        ax (matplotlib.axes.Axes): axes to plot on. If None, a new figure is created.
+    """
+    if ax == None:
+        fig, ax = plt.subplots(figsize = (8,6))
+    for locs in locs_list:
+        ax.plot(locs[:,0], locs[:,1], color = "tab:blue")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
 
 def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarray, region_max: np.ndarray, n_offsets: int = 0, axis=[0,1], ax = None):
     """Plots the squares used to cover all the locs as in fractal_dimension method.
@@ -135,8 +149,8 @@ def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarr
         fig, ax = plt.subplots(figsize = (8,6))
     for locs in locs_list:
         ax.plot(locs[:,axis_1], locs[:,axis_2], color = "tab:blue")
-    ax.set_xlim(region_min[0], region_max[0])
-    ax.set_ylim(region_min[1], region_max[1])
+    ax.set_xlim(region_min[axis_1], region_max[axis_1])
+    ax.set_ylim(region_min[axis_2], region_max[axis_2])
     ax.set_xlabel("x")
     ax.set_ylabel("y")
 

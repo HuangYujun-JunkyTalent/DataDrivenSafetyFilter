@@ -140,7 +140,17 @@ class Sampler:
     
     def state_iterator(self) -> Iterable[np.ndarray]:
         """Sample state from uniform distribution, also includes the always zero l (progress along the track)"""
-        y_min = np.array([-self.track_width, self.mu_min, self.delta_v_x_min, self.v_y_min, self.phi_rate_min, 0.0])
+        v_real_min = self.delta_v_x_min + self.v_0
+        v_min = min(v_real_min, 0.5)
+        v_delta_min = v_min - self.v_0
+        y_min = np.array([-self.track_width, self.mu_min, v_delta_min, self.v_y_min, self.phi_rate_min, 0.0])
         y_max = np.array([self.track_width, self.mu_max, self.delta_v_x_max, self.v_y_max, self.phi_rate_max, 0.0])
         while True:
             yield(np.random.uniform(y_min, y_max))
+    
+    def input_iterator(self) -> Iterable[np.ndarray]:
+        """Sample input from uniform distribution"""
+        u_min = np.array([self.a_min, -self.delta_max])
+        u_max = np.array([self.a_max, self.delta_max])
+        while True:
+            yield(np.random.uniform(u_min, u_max))

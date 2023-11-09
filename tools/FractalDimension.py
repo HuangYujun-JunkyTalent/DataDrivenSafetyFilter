@@ -134,7 +134,7 @@ def plot_locs_list(locs_list: List[np.ndarray], ax = None):
     ax.set_xlabel("x")
     ax.set_ylabel("y")
 
-def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarray, region_max: np.ndarray, n_offsets: int = 0, axis=[0,1], ax = None):
+def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarray, region_max: np.ndarray, n_offsets: int = 0, axis=[0,1], ax = None) -> int:
     """Plots the squares used to cover all the locs as in fractal_dimension method.
     Args:
         locs_list (List[np.ndarray]): list of locations where the graph is marked as 1.
@@ -185,3 +185,5 @@ def plot_squares(locs_list: List[np.ndarray], scale: float, region_min: np.ndarr
     for i, j in product(range(len(bin_edge_to_plot[0])-1), range(len(bin_edge_to_plot[1])-1)):
         if H1[i,j] > 0:
             ax.add_patch(Rectangle((bin_edge_to_plot[0][i], bin_edge_to_plot[1][j]), scale, scale, fill = False, color = "tab:red"))
+    
+    return np.sum(H1>0)

@@ -148,7 +148,7 @@ class DynamicModelPredictor:
                 print("state: ", self.dynamic_error_model.state)
                 print("input: ", u)
                 return np.array([np.nan]*self.L)
-        xi_t = np.vstack(y_init_list + u_init_list)
+        xi_t = np.vstack(u_init_list + y_init_list)
 
         y_pred_list = self.predict(xi_t, u_future)
         y_real_list: List[np.matrix] = []

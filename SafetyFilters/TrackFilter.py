@@ -118,6 +118,8 @@ class SafetyFilterForTrack:
             # error_state_no_v0 = system.state - np.array([0,0,system._v_0,0])
             error_state_no_v0 = system.state
             error_state_no_v0[2] = error_state_no_v0[2] - system._v_0
+            if system.p == 5: # dynamics model with output y = [e_lat, mu, v_x, v_y, yaw_rate, l]
+                error_state_no_v0 = np.hstack(( error_state_no_v0[:4], error_state_no_v0[-1] ))
             if system.p == 4: #dynamic model
                 error_state_no_v0 = error_state_no_v0[:4]
             elif system.p == 3: #kinematic model

@@ -41,7 +41,7 @@ class DDSafetyFilter(ABC):
         self._solver_args = sf_params.solver_args
         self._verbose = sf_params.verbose
         self._warm_start = sf_params.warm_start
-    
+
     def filter(self, xi_t: np.matrix, u_obj: np.matrix) -> Tuple[np.matrix, str, float]:
         """Return tuple of (filtered control input, status, optimal value)"""
         self._xi_t.value = np.array(xi_t.flat)

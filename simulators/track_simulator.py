@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Tuple, Union, Optional
+from typing import List, Dict, Any, Tuple, Union, Optional, Mapping
 import math
 import os
 import datetime
@@ -16,7 +16,7 @@ from IOData.IOData import IOData, InputRule
 from IOData.IODataWith_l import IODataWith_l
 from System.ErrorKinematicAcceLATI import LinearizedErrorKinematicAcceModel, LinearizedErrorKinematicAcceModelParams, KinematicAcceModelParams, KinematicAcceModel
 from System.DynamicModel import DynamicModel, DynamicModelParams, DynamicModelFewOutput
-from System.DynamicErrorModel import DynamicErrorModelFewOutput, DynamicErrorModelParams, DynamicErrorModelVxy
+from System.DynamicErrorModel import DynamicErrorModelFewOutput, DynamicErrorModelParams, DynamicErrorModelVxy, DynamicErrorModelVxyL
 from tools.simualtion_results import Results
 from tools.simple_track_generator import trackGenerator, arc, line
 
@@ -32,12 +32,14 @@ from SafetyFilters.Indirect_Nominal_ZeroV_Weighting import IndirectNominalZeroVW
 from SafetyFilters.Indirect_Nominal_ZeroV_Weighting_Add_Data import IndirectNominalZeroVWeightingAddDataFilter, IndirectNominalZeroVWeightingAddDataParams
 from SafetyFilters.Indirect_Nominal_FixMu_AddData import IndirectNominalFixMuAddDataFilter, IndirectNominalFixMuAddDataParams
 from SafetyFilters.Indirect_Nominal_FixMu_AddDataLateral import IndirectNominalFixMuAddDataLateralFilter, IndirectNominalFixMuAddDataLateralParams
+from SafetyFilters.Indirect_Nominal_FixMu_Weighting_Add_Data_WithL import IndirectNominalFixMuWeightingAddDataWithLFilter, IndirectNominalFixMuWeightingAddDataWithLParams
 from SafetyFilters.Direct_Nominal_Zero import DirectNominalZeroFilter, DirectNominalZeroParams
 from SafetyFilters.TrackFilter import SafetyFilterForTrack
 from SafetyFilters.TrackFilter_AddData import SafetyFilterForTrackAddData
 
-from simulators.simulation_settings import SafetyFilterTypes, TrackFilterTypes, SimulationInputRule, ModelType
-from typing import Mapping
+from Controllers.IndirectFixMuMaxL import IndirectFixMuMaxLController, IndirectFixMuMaxLParams
+
+from simulators.simulation_settings import SafetyFilterTypes, TrackFilterTypes, SimulationInputRule, ModelType, ControllerTypes
 
 FewOutPutErrorSystem = Union[LinearizedErrorKinematicAcceModel, DynamicErrorModelFewOutput]
 
@@ -154,6 +156,7 @@ class TrackSimulator:
     filter_model_type = ModelType.KINEMATIC
     track_filter_type = TrackFilterTypes.SINGLE_SEGMENT
     filter_type_list = [SafetyFilterTypes.INDIRECT_FITTING_TERMINAL]
+    use_zero_l_initial = True # whether to use zero l for every trajectory slice in controller
     # sampling time
     Ts = 1/100
     L = 50 # prediction horizon
@@ -238,6 +241,79 @@ class TrackSimulator:
                                         'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
                                         'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
             )
+        elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA_WITH_L:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            R = np.matrix('1 0; 0 1')
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            R = kwargs.get('R', R)
+            epsilon = kwargs.get('epsilon', epsilon)
+            t_new_data = kwargs.get('t_new_data', 6.0)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
+
+            min_dist = kwargs.get('min_dist', 0.1)
+            min_num_slices = kwargs.get('min_num_slices', 300)
+            min_portion_slices = kwargs.get('min_portion_slices', 0.5)
+            f = kwargs.get('f', lambda x: 1/x**2)
+
+            filter_params = IndirectNominalFixMuWeightingAddDataWithLParams(
+                L=self.L, lag=self.lag, R=R, lam_sig=lam_sig, epsilon=None,
+                t_new_data=t_new_data,
+                min_dist=min_dist,
+                min_num_slices=min_num_slices,
+                min_portion_slices=min_portion_slices,
+                f = f,
+                c=[
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
+                ],
+                sf_params=SFParams(steps=self.steps, verbose=False, solver=cp.MOSEK,
+                                    solver_args={'mosek_params':{
+                                        'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-5,
+                                        'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                                        'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-5,
+                                        'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            )
+        elif filter_type == ControllerTypes.INDIRECT_FIX_MU_MAX_L:
+            lam_sig = 50000
+            c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
+            lam_sig = kwargs.get('lam_sig', lam_sig)
+            c = kwargs.get('c', c)
+            # epsilon = kwargs.get('epsilon', epsilon)
+            t_new_data = kwargs.get('t_new_data', 6.0)
+            use_zero_l_initial = kwargs.get('use_zero_l_initial', self.use_zero_l_initial)
+            c_max_list = [half_track_width, self.mu_max, (self.v_x_max-self.v_x_min)/2, (self.v_y_max-self.v_y_min)/2]
+
+            min_dist = kwargs.get('min_dist', 0.1)
+            min_num_slices = kwargs.get('min_num_slices', 300)
+            min_portion_slices = kwargs.get('min_portion_slices', 0.5)
+            f = kwargs.get('f', lambda x: 1/x**2)
+
+            verbose = kwargs.get('verbose', False)
+
+            solver = kwargs.get('solver', cp.MOSEK)
+            solver_args = kwargs.get('solver_args', {'mosek_params':{
+                            'MSK_DPAR_INTPNT_CO_TOL_PFEAS':1e-3,
+                            'MSK_DPAR_INTPNT_CO_TOL_DFEAS':1e-3,
+                            'MSK_DPAR_INTPNT_CO_TOL_REL_GAP':1e-3,
+                            'MSK_DPAR_INTPNT_CO_TOL_INFEAS':1e-3,
+                            'MSK_IPAR_INTPNT_MAX_ITERATIONS': 30000}})
+            filter_params = IndirectFixMuMaxLParams(
+                L=self.L, lag=self.lag, lam_sig=lam_sig,
+                t_new_data=t_new_data,
+                min_dist=min_dist,
+                min_num_slices=min_num_slices,
+                min_portion_slices=min_portion_slices,
+                f = f,
+                use_zero_l_initial=use_zero_l_initial,
+                c=[
+                    [c_i*c_max for c_i in c_sub] for c_max,c_sub in zip(c_max_list, c)
+                ],
+                steps=self.steps, verbose=verbose, solver=solver,
+                solver_args=solver_args
+            )
+            # self.use_zero_l_initial = use_zero_l_initial
         elif filter_type == SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA:
             lam_sig = 50000
             c = [[0.3, 0.1, 0.05, 0.01], [0.3, 0.1, 0.05, 0.01]]
@@ -461,7 +537,7 @@ class TrackSimulator:
             )
         return filter_params
     
-    def get_single_filter(self, 
+    def get_single_filter(self,
                           cur: float, filter_type: SafetyFilterTypes,
                           system, io_data, **kwargs):
         params = self.get_filter_params(cur, filter_type, **kwargs)
@@ -477,17 +553,22 @@ class TrackSimulator:
                         SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA: IndirectNominalFixMuAddDataFilter,
                         SafetyFilterTypes.INDIRECT_FIX_MU_ADD_DATA_LATERAL: IndirectNominalFixMuAddDataLateralFilter,
                         SafetyFilterTypes.DIRECT_ZERO_TERMINAL: DirectNominalZeroFilter,
+                        SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA_WITH_L: IndirectNominalFixMuWeightingAddDataWithLFilter,
+                        ControllerTypes.INDIRECT_FIX_MU_MAX_L: IndirectFixMuMaxLController,
                         }.get(filter_type, IndirectNominalFittingFilter)
         return FilterClass(system, io_data, params)
-    
+
     def simulate_with_separate_collection(self,
                                         random_seed: int,
                                         track_filter_type: TrackFilterTypes,
                                         filter_type: SafetyFilterTypes,
+                                        application_filter_type: Union[SafetyFilterTypes, ControllerTypes],
                                         filter_params: Dict[str, Any],
+                                        application_params: Dict[str, Any],
                                         collection_input_type: SimulationInputRule,
                                         simulation_input_types: List[SimulationInputRule],
                                         max_run_turns: int = 10,
+                                        continue_to_end: bool = False,
                                         ) -> List[Results]:
         """Simulate with separate data-collection and filtering steps."""
         # setup needed options
@@ -504,19 +585,21 @@ class TrackSimulator:
         print("\nRunning with initial dataset")
         empty_result = Results(Ts = self.Ts)
         results_list.append(empty_result)
+        self.filter_type_list = [application_filter_type]
         for input_rule in simulation_input_types:
             print(f"\nSimulating with input rule {input_rule}")
             self.stop_after_out_of_track = False
             self.out_of_track = False
             self.save_dataset_after = False
             self.simulation_input_type = input_rule
-            self.get_utilities_for_simualtion(random_seed, **filter_params)
+            self.get_utilities_for_simualtion(random_seed, **application_params)
             print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-            result = self.simulate_once(random_seed, **filter_params)
+            result = self.simulate_once(random_seed, **application_params)
             results_list.append(result)
 
         print("\nCollecting data for the first time")
         self.stop_after_out_of_track = True
+        self.filter_type_list = [filter_type]
         self.get_utilities_for_simualtion(random_seed, **filter_params)
         print(f"\nSimulating with input rule {collection_input_type}")
         self.save_dataset_after = True
@@ -526,7 +609,7 @@ class TrackSimulator:
         results_list.append(dataset_result)
 
         all_good = False
-        while not all_good and len(results_list) < max_run_turns*(len(simulation_input_types)+1):
+        while ((not all_good) or continue_to_end) and len(results_list) < max_run_turns*(len(simulation_input_types)+1):
         # while len(results_list) < max_run_turns:
             print("\nContinue to simulate")
             for input_rule in simulation_input_types:
@@ -535,10 +618,11 @@ class TrackSimulator:
                 self.out_of_track = False
                 self.save_dataset_after = False
                 self.simulation_input_type = input_rule
-                self.get_utilities_for_simualtion(random_seed, **filter_params)
+                self.filter_type_list = [application_filter_type]
+                self.get_utilities_for_simualtion(random_seed, **application_params)
                 self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                 print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-                result = self.simulate_once(random_seed, **filter_params)
+                result = self.simulate_once(random_seed, **application_params)
                 results_list.append(result)
             all_good = True # whether constraints not violated for all simulation input rules
             for result in results_list[-len(simulation_input_types):]:
@@ -551,6 +635,7 @@ class TrackSimulator:
                         self.out_of_track = False
                         self.save_dataset_after = True
                         self.simulation_input_type = collection_input_type
+                        self.filter_type_list = [filter_type]
                         self.get_utilities_for_simualtion(random_seed, **filter_params)
                         self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
@@ -685,7 +770,7 @@ class TrackSimulator:
 
         self.random_seed = random_seed
         # store parameters, after single simualtion they should be restored
-        Ts, L, steps, lag, slack = self.Ts, self.L, self.steps, self.lag, self.slack
+        Ts, L, steps, lag, slack, use_zero_l_initial = self.Ts, self.L, self.steps, self.lag, self.slack, self.use_zero_l_initial
     
         self.set_params_from_dict(**kwargs)
 
@@ -703,7 +788,7 @@ class TrackSimulator:
             v_0 = math.sqrt(self.global_initial_state[3]**2 + self.global_initial_state[4]**2)
             initial_state = np.hstack((self.global_initial_state[0:3],np.array([v_0])))
             crs_model = KinematicAcceModel(kinematic_model_params, initial_state)
-        elif self.simulate_model_type == ModelType.DYNAMIC:
+        elif self.simulate_model_type in (ModelType.DYNAMIC, ModelType.DYNAMIC_WITH_L):
             initial_state = self.global_initial_state
             dynamic_model_params = DynamicModelParams(
                 self.Ts, self.l_f, self.l_r, self.m, self.Iz, self.Bf, self.Cf, self.Df, self.Br, self.Cr, self.Dr, self.Croll, self.Cm1, self.Cm2, self.Cd,
@@ -787,8 +872,12 @@ class TrackSimulator:
                 u_t = u_i[j*self.systems[i_seg].m:(j+1)*self.systems[i_seg].m]
 
                 # if constraint not satisfied, save predicted values at previous steps
-                A = self.systems[i_seg].A_y[::self.systems[i_seg].p] # only take e_lat
-                b = self.systems[i_seg].b_y[::self.systems[i_seg].p]
+                if self.filter_model_type in ModelType.dynamic_with_l_models:
+                    A = self.systems[i_seg].A_y[::self.systems[i_seg].p-1] # only take e_lat
+                    b = self.systems[i_seg].b_y[::self.systems[i_seg].p-1]
+                else:
+                    A = self.systems[i_seg].A_y[::self.systems[i_seg].p] # only take e_lat
+                    b = self.systems[i_seg].b_y[::self.systems[i_seg].p]
                 x = np.matrix(self.systems[i_seg].state).T
                 x = x[:self.filter._safety_filters[i_seg]._p]
                 x[2] = x[2] - self.v_0 # from actual velocity to deviation from steady state
@@ -846,7 +935,7 @@ class TrackSimulator:
                 initial_states_filter.append(crs_model.state)
 
                 # save to results and trajectory, for initial condition of filter later
-                results.add_point(u_obj_t, u_t, 
+                results.add_point(u_obj_t, u_t,
                                   global_state, self.noise_list[i_steps+self.lag], 
                                   error_dynamics_state, np.zeros(error_dynamics_state.shape),
                                   i_seg,)
@@ -860,7 +949,7 @@ class TrackSimulator:
             results.H_uy, results.H_y_future = self.filter._safety_filters[0].get_datasets_hankel_matrix()
 
         # reset parameters
-        self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack
+        self.Ts, self.L, self.steps, self.lag, self.slack, self.use_zero_l_initial = Ts, L, steps, lag, slack, use_zero_l_initial
         return results
     
     def save_datasets(self) -> Optional[str]:
@@ -894,6 +983,8 @@ class TrackSimulator:
         """
         sys_for_output = self.get_system(cur=self.systems[i_seg].cur, start_point=self.systems[i_seg].segment_start, system_type=self.simulate_model_type)
         sys_for_output.set_kinematic_model_state(global_initial_state)
+        if self.use_zero_l_initial:
+            sys_for_output.set_l_0(sys_for_output._state[-1])
         real_output_list = []
         u_proposed_list = self.buffer_u_value[i][1]
         for u in u_proposed_list:
@@ -1085,6 +1176,21 @@ class TrackSimulator:
             )
             # for this system, the global initial state does not matter
             return DynamicErrorModelVxy(params=system_params, initial_state=np.array([0,0,0,0,0,0]))
+        elif system_type == ModelType.DYNAMIC_WITH_L:
+            system_params = DynamicErrorModelParams(
+                    DynamicModelParams(Ts=self.Ts, l_f=self.l_f, l_r=self.l_r, m=self.m, Iz=self.Iz, Bf=self.Bf, Cf=self.Cf, Df=self.Df, Br=self.Br, Cr=self.Cr, Dr=self.Dr, Croll=self.Croll, Cm1=self.Cm1, Cm2=self.Cm2, Cd=self.Cd),
+                    cur = cur,
+                    segment_start = start_point,
+                    v_0 = self.v_0,
+                    A_u = np.matrix('1 0; 0 1; -1 0; 0 -1'),
+                    b_u = np.matrix([[self.a_max*self.m],[self.delta_max],[-self.a_min*self.m],[self.delta_max]]),
+                    A_y = np.matrix('1 0 0 0 0; 0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0; -1 0 0 0 0; 0 -1 0 0 0; 0 0 -1 0 0; 0 0 0 -1 0'),
+                    b_y = np.matrix([[half_track_width],[self.mu_max],[self.v_x_max-self.v_0], [self.v_y_max],[half_track_width],[-self.mu_min],[-self.v_x_min+self.v_0],[-self.v_y_min]]),
+                    A_n = np.matrix('1 0 0 0 0; 0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0; 0 0 0 0 1; -1 0 0 0 0; 0 -1 0 0 0; 0 0 -1 0 0; 0 0 0 -1 0; 0 0 0 0 -1'),
+                    b_n = np.matrix([[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max/1.2],[self.n_v_max/1.2],[self.n_e_lat_max],[self.n_e_lat_max],[self.n_mu_max],[self.n_v_max/1.2],[self.n_v_max/1.2],[self.n_e_lat_max]]),
+            )
+            # for this system, the global initial state does not matter
+            return DynamicErrorModelVxyL(params=system_params, initial_state=np.array([0,0,0,0,0,0]))
     
     def get_io_data_dic(self) -> Dict[float, IODataWith_l]:
         if self.use_saved_data: # use saved data
@@ -1215,3 +1321,4 @@ class TrackSimulator:
         self.steps = kwargs.get('steps', self.steps)
         self.lag = kwargs.get('lag', self.lag)
         self.slack = kwargs.get('slack', self.slack)
+        self.use_zero_l_initial = kwargs.get('use_zero_l_initial', self.use_zero_l_initial)

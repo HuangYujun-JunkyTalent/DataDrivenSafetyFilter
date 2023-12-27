@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple, Callable
+from typing import List, Dict, Tuple, Callable, Optional
 import itertools
 from itertools import islice
 import math
@@ -102,7 +102,47 @@ class DynamicModelPredictor:
         Phi = Yf @ D_inv_Huy_T @ np.linalg.pinv(H_u_y_1 @ D_inv_Huy_T)
 
         return Phi
-    
+
+    def get_d_array(self, xi_t: np.matrix) -> np.ndarray:
+        m = self.io_data_list[0]._input_data[0].shape[0]
+        Huy, _ = get_datasets_hankel_matrix(self.io_data_list, self.lag, self.L)
+        Up = Huy[:m*self.lag,:]
+        Yp = Huy[m*(self.lag+self.L):,:]
+        width_H = Up.shape[1]
+
+        delta_H_x_t  = np.vstack((Up, Yp)) - xi_t
+        d_array = np.zeros((width_H,))
+        for i in range(width_H):
+            d_array[i] = np.sqrt((delta_H_x_t[:,i].T @ self.weight_xi @ delta_H_x_t[:,i])[0,0])
+
+        return d_array
+
+    def plot_histogram_d(self, state: np.ndarray, initial_inputs: List[np.matrix],
+                         ax: plt.Axes,
+                         bins = 'auto', range: Optional[float] = None,
+                         ):
+        self.dynamic_error_model.set_error_state(state)
+        u_init_list = []
+        y_init_list = []
+        try:
+            for u in initial_inputs:
+                y, _ = self.dynamic_error_model.step(u)
+                u_init_list.append(u)
+                y_init_list.append(y)
+        except Exception as e:
+            print(e)
+            print("\nError occured when propogating real system:")
+            print("state: ", self.dynamic_error_model.state)
+            print("input: ", u)
+            return np.array([np.nan]*self.L)
+        xi_t = np.vstack(u_init_list + y_init_list)
+
+        d_array = self.get_d_array(xi_t)
+
+        counts, bins = np.histogram(d_array, bins=bins, range=range)
+
+        ax.stairs(counts, bins)
+
     def predict(self, xi_t: np.matrix, u_f: List[np.matrix]) -> List[np.matrix]:
         """
         Predict future states of the system
@@ -143,11 +183,11 @@ class DynamicModelPredictor:
                 u_init_list.append(u)
                 y_init_list.append(y)
         except Exception as e:
-                print(e)
-                print("\nError occured when propogating real system:")
-                print("state: ", self.dynamic_error_model.state)
-                print("input: ", u)
-                return np.array([np.nan]*self.L)
+            print(e)
+            print("\nError occured when propogating real system:")
+            print("state: ", self.dynamic_error_model.state)
+            print("input: ", u)
+            return np.array([np.nan]*self.L)
         xi_t = np.vstack(u_init_list + y_init_list)
 
         y_pred_list = self.predict(xi_t, u_future)

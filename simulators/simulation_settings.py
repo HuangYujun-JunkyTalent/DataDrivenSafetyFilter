@@ -11,6 +11,7 @@ class SafetyFilterTypes(Enum):
     INDIRECT_FIX_MU = 'fix mu'
     INDIRECT_FIX_MU_WEIGHTING = 'fix mu with weighting'
     INDIRECT_FIX_MU_WEIGHTING_ADD_DATA = 'fix mu with\n weighting and add data'
+    INDIRECT_FIX_MU_WEIGHTING_ADD_DATA_WITH_L = 'fix mu with\n weighting and add data\n with l'
     INDIRECT_ZERO = 'all zero'
     INDIRECT_ZERO_V = 'stop at \n center line'
     INDIRECT_ZERO_V_WEIGHTING = 'stop at \n center line \n with weighting'
@@ -45,6 +46,7 @@ class SafetyFilterTypes(Enum):
             SafetyFilterTypes.INDIRECT_FIX_MU,
             SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING,
             SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA,
+            SafetyFilterTypes.INDIRECT_FIX_MU_WEIGHTING_ADD_DATA_WITH_L,
             SafetyFilterTypes.INDIRECT_ZERO,
             SafetyFilterTypes.INDIRECT_ZERO_V,
             SafetyFilterTypes.INDIRECT_STOP,
@@ -52,6 +54,7 @@ class SafetyFilterTypes(Enum):
             SafetyFilterTypes.DIRECT_ZERO_TERMINAL,
             SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING,
             SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA,
+            ControllerTypes.INDIRECT_FIX_MU_MAX_L,
         )
 
     @classmethod
@@ -71,6 +74,9 @@ class SafetyFilterTypes(Enum):
             SafetyFilterTypes.INDIRECT_ZERO_V_WEIGHTING_ADD_DATA,
         )
 
+
+class ControllerTypes(Enum):
+    INDIRECT_FIX_MU_MAX_L = auto()
 
 class TrackFilterTypes(Enum):
     """Different types of track filters
@@ -92,6 +98,7 @@ class ModelType(Enum):
     KINEMATIC = auto()
     DYNAMIC = auto()
     DYNAMIC_FEW_OUTPUT = auto()
+    DYNAMIC_WITH_L = auto()
 
     @classmethod
     @property
@@ -99,8 +106,16 @@ class ModelType(Enum):
         return (
             ModelType.DYNAMIC,
             ModelType.DYNAMIC_FEW_OUTPUT,
+            ModelType.DYNAMIC_WITH_L,
         )
     
+    @classmethod
+    @property
+    def dynamic_with_l_models(self) -> Tuple[ModelType]:
+        return (
+            ModelType.DYNAMIC_WITH_L,
+        )
+
     @classmethod
     @property
     def kinematic_models(self) -> Tuple[ModelType]:

@@ -626,7 +626,7 @@ class TrackSimulator:
                 results_list.append(result)
             all_good = True # whether constraints not violated for all simulation input rules
             for result in results_list[-len(simulation_input_types):]:
-                if len(result.violating_time_steps) != 0:
+                if len(result.violating_time_steps) != 0 or continue_to_end:
                     all_good = False
                     if len(results_list) < max_run_turns*(len(simulation_input_types)+1):
                         # collect new datasets with proper input rule
@@ -912,7 +912,9 @@ class TrackSimulator:
                         self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack
                         return results
                 elif np.all(A*x <= b) and self.out_of_track:
+                    t_return = self.Ts*(i_block*self.steps+j)
                     print(f"Constraint satisfied again at time {self.Ts*(i_block*self.steps+j)}.")
+                    results.return_time_steps.append(t_return)
                     self.out_of_track = False
 
                 # try step global system

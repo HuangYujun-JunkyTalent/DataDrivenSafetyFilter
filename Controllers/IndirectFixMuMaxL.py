@@ -397,6 +397,6 @@ class IndirectFixMuMaxLController:
         if self.params.use_zero_l_initial:
             H_uy_noised = np.delete(H_uy_noised, self._m*(self.params.lag+self.params.L)+self._p-1, axis=0)
         D_inv_Huy_T = D_inv @ H_uy_noised.T
-        Phi = H_future_noised @ D_inv_Huy_T @ npl.inv(H_uy_noised @ D_inv_Huy_T)
+        Phi = H_future_noised @ D_inv_Huy_T @ npl.pinv(H_uy_noised @ D_inv_Huy_T)
 
         return Phi

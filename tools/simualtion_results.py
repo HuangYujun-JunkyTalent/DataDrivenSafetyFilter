@@ -59,6 +59,12 @@ class Results:
 
     # time_steps of violating constraints
     violating_time_steps: List[float] = []
+    # time steps of returning to the track
+    return_time_steps: List[float] = []
+    # time spans of violating constraints
+    violating_time_spans: List[Tuple[float, float]] = []
+    violating_time: float = 0.0
+    lap_time: float = 0.0
     mark_time_steps: List[int] = []
     # simulation time
     simulation_time: float = 0.0
@@ -92,6 +98,12 @@ class Results:
 
         self.violating_time_steps: List[float] = []
         self.mark_time_steps: List[int] = []
+
+        self.return_time_steps: List[float] = []
+        # time spans of violating constraints
+        self.violating_time_spans: List[Tuple[float, float]] = []
+        self.violating_time: float = 0.0
+        self.lap_time: float = 0.0
 
     def add_point(self, input_obj: np.ndarray, input_applied: np.ndarray,
                   global_state: np.ndarray, global_noise: np.ndarray,
@@ -137,6 +149,27 @@ class Results:
         self.mean_calculation_time = mean_calculation_time
         return mean_calculation_time
     
+    def calculate_violation_time(self) -> float:
+        """Calculate the total violation time
+        """
+        self.violating_time = 0.0
+        for start, end in zip(self.violating_time_steps, self.return_time_steps):
+            self.violating_time += end - start
+            self.violating_time_spans.append((start, end))
+        self.violating_time = self.Ts * len(self.violating_time_steps)
+        return self.violating_time
+    
+    def calculate_lap_time(self) -> float:
+        indices_at_start_segment = np.nonzero(np.array(self._segment_index_list) == 0)[0]
+        if len(indices_at_start_segment) == 0:
+            return np.nan
+        for i, j in enumerate(indices_at_start_segment, indices_at_start_segment[0]):
+            if i!=j:
+                lap_time = self.Ts * indices_at_start_segment[i]
+                self.lap_time = lap_time
+                return lap_time
+        return np.nan
+    
     def add_opt_value(self, opt_value: float) -> None:
         self._opt_value_list.append(opt_value)
     
@@ -153,8 +186,9 @@ class Results:
         self.calculate_intervention()
         self.calculate_mean_calculation_time()
         self.calculate_sigma_infty_value()
+        self.calculate_violation_time()
+        self.calculate_lap_time()
         
-    
     def calculate_sigma_infty_value(self) -> Tuple[float, float]:
         """Returns the minimum and maximum sigma_infty norm
         """

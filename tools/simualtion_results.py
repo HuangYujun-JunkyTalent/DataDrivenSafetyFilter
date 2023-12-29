@@ -154,9 +154,8 @@ class Results:
         """
         self.violating_time = 0.0
         for start, end in zip(self.violating_time_steps, self.return_time_steps):
-            self.violating_time += end - start
+            self.violating_time = self.violating_time + end - start
             self.violating_time_spans.append((start, end))
-        self.violating_time = self.Ts * len(self.violating_time_steps)
         return self.violating_time
     
     def calculate_lap_time(self) -> float:

@@ -9,6 +9,8 @@ import matplotlib.lines as mlines
 from IOData.IOData import IOData, InputRule
 from .simple_track_generator import trackGenerator
 
+from itertools import zip_longest
+
 
 class PlotStyle(Enum):
     """Enum for plot styles
@@ -153,7 +155,7 @@ class Results:
         """Calculate the total violation time
         """
         self.violating_time = 0.0
-        for start, end in zip(self.violating_time_steps, self.return_time_steps):
+        for start, end in zip_longest(self.violating_time_steps, self.return_time_steps, fillvalue=self.simulation_time):
             self.violating_time = self.violating_time + end - start
             self.violating_time_spans.append((start, end))
         return self.violating_time

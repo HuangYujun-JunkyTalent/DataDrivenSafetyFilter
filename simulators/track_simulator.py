@@ -564,12 +564,12 @@ class TrackSimulator:
                                         filter_type: SafetyFilterTypes,
                                         application_filter_type: Union[SafetyFilterTypes, ControllerTypes],
                                         filter_params: Dict[str, Any],
-                                        application_params: Dict[str, Any],
+                                        application_params: List[Dict[str, Any]],
                                         collection_input_type: SimulationInputRule,
                                         simulation_input_types: List[SimulationInputRule],
                                         max_run_turns: int = 10,
                                         continue_to_end: bool = False,
-                                        ) -> List[Results]:
+                                        ) -> List[List[Results]]:
         """Simulate with separate data-collection and filtering steps."""
         # setup needed options
         self.stop_after_out_of_track = True
@@ -580,11 +580,12 @@ class TrackSimulator:
         self.track_filter_type = track_filter_type
         self.filter_type_list = [filter_type] # reserve for using different filter types for segments
 
-        results_list: List[Results] = []
+        collection_results_list: List[Results] = []
+        application_results_list_list: List[List[Results]] = [[] for _ in application_params]
 
         print("\nRunning with initial dataset")
         empty_result = Results(Ts = self.Ts)
-        results_list.append(empty_result)
+        collection_results_list.append(empty_result)
         self.filter_type_list = [application_filter_type]
         for input_rule in simulation_input_types:
             print(f"\nSimulating with input rule {input_rule}")
@@ -592,10 +593,11 @@ class TrackSimulator:
             self.out_of_track = False
             self.save_dataset_after = False
             self.simulation_input_type = input_rule
-            self.get_utilities_for_simualtion(random_seed, **application_params)
-            print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-            result = self.simulate_once(random_seed, **application_params)
-            results_list.append(result)
+            for i, application_param_dict in enumerate(application_params):
+                self.get_utilities_for_simualtion(random_seed, **application_param_dict)
+                print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}, and application parameters {application_param_dict}")
+                result = self.simulate_once(random_seed, **application_param_dict)
+                application_results_list_list[i].append(result)
 
         print("\nCollecting data for the first time")
         self.stop_after_out_of_track = True
@@ -606,11 +608,12 @@ class TrackSimulator:
         self.simulation_input_type = collection_input_type
         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
         dataset_result = self.simulate_once(random_seed, **filter_params)
-        results_list.append(dataset_result)
+        collection_results_list.append(dataset_result)
 
         all_good = False
-        while ((not all_good) or continue_to_end) and len(results_list) < max_run_turns*(len(simulation_input_types)+1):
-        # while len(results_list) < max_run_turns:
+        num_runs = 1
+        while ((not all_good) or continue_to_end) and num_runs < max_run_turns:
+            num_runs = num_runs + 1
             print("\nContinue to simulate")
             for input_rule in simulation_input_types:
                 print(f"\nSimulating with input rule {input_rule}")
@@ -619,16 +622,18 @@ class TrackSimulator:
                 self.save_dataset_after = False
                 self.simulation_input_type = input_rule
                 self.filter_type_list = [application_filter_type]
-                self.get_utilities_for_simualtion(random_seed, **application_params)
-                self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
-                print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-                result = self.simulate_once(random_seed, **application_params)
-                results_list.append(result)
+                for i, application_param_dict in enumerate(application_params):
+                    self.get_utilities_for_simualtion(random_seed, **application_param_dict)
+                    self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
+                    print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}, and application parameters {application_param_dict}")
+                    result = self.simulate_once(random_seed, **application_param_dict)
+                    application_results_list_list[i].append(result)
             all_good = True # whether constraints not violated for all simulation input rules
-            for result in results_list[-len(simulation_input_types):]:
+            for application_result_list in application_results_list_list:
+                result = application_result_list[-1]
                 if len(result.violating_time_steps) != 0 or continue_to_end:
                     all_good = False
-                    if len(results_list) < max_run_turns*(len(simulation_input_types)+1):
+                    if num_runs < max_run_turns:
                         # collect new datasets with proper input rule
                         print(f"\nCollecting dataset with input rule {collection_input_type}. \n")
                         self.stop_after_out_of_track = True
@@ -640,12 +645,12 @@ class TrackSimulator:
                         self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
                         dataset_result = self.simulate_once(random_seed, **filter_params)
-                        results_list.append(dataset_result)
+                        collection_results_list.append(dataset_result)
                     break
         
-        print(f"\nConcluding simulation, with {len(results_list)} results collected.\n")
+        print(f"\nConcluding simulation, with {[len(collection_results_list)]+[len(results_list) for results_list in application_results_list_list]} results collected.\n")
 
-        return results_list
+        return [collection_results_list] + application_results_list_list
 
     def simulate_with_dataset_update(self,
                                      random_seed: int,
@@ -764,6 +769,7 @@ class TrackSimulator:
             self.noise_list = self.noise_list_dict[random_seed]
 
         self.filter = self.get_filter(**kwargs)
+        self.out_of_track = False
         self.Ts, self.L, self.steps, self.lag, self.slack = Ts, L, steps, lag, slack
 
     def simulate_once(self, random_seed: int, **kwargs) -> Results:

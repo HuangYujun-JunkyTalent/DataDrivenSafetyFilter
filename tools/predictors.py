@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from IOData.IOData import IOData, InputRule
 from IOData.IODataWith_l import IODataWith_l
-from System.DynamicErrorModel import DynamicErrorModelVxy
+from System.DynamicErrorModel import DynamicErrorModelVxy, DynamicErrorModelVxyL
 from tools.simualtion_results import Results, PlotStyle
 from tools.dataset_analyse import get_datasets_hankel_matrix, Sampler
 
@@ -119,7 +119,7 @@ class DynamicModelPredictor:
 
     def plot_histogram_d(self, state: np.ndarray, initial_inputs: List[np.matrix],
                          ax: plt.Axes,
-                         bins = 'auto', range: Optional[float] = None,
+                         bins = 'auto', range: Optional[Tuple[float,float]] = None,
                          ):
         self.dynamic_error_model.set_error_state(state)
         u_init_list = []
@@ -160,7 +160,7 @@ class DynamicModelPredictor:
         y_future_matrix = Phi[:,:m*self.lag] @ xi_t[:m*self.lag] + Phi[:,m*self.lag:m*(self.lag+self.L)] @ u_future_matrix + Phi[:,m*(self.lag+self.L):-1] @ xi_t[m*self.lag:] + Phi[:,-1]
 
         return np.split(y_future_matrix, self.L)
-    
+
     def propogate_real_system(self, x_t: np.ndarray, u_future: List[np.matrix]) -> List[np.matrix]:
         self.dynamic_error_model.set_error_state(x_t)
         y_future = []
@@ -169,7 +169,7 @@ class DynamicModelPredictor:
             y_future.append(y)
         
         return y_future
-    
+
     def prediction_error(self, x_t: np.ndarray, u_initial: List[np.matrix], u_future: List[np.matrix]) -> np.ndarray:
         """Start from a state x_t, first get extended initial using u_initial, then predict using u_future
         Calculate the prediction error
@@ -242,3 +242,152 @@ class DynamicModelPredictor:
             error_for_state = self.prediction_error(state, u_initial_list, u_future_list)
             error_list.append(error_for_state)
         return error_list
+    
+
+class DynamicModelPredictorWith_l(DynamicModelPredictor):
+    use_zero_l_initial_condition: bool
+
+    def __init__(self, dynamic_error_model: DynamicErrorModelVxyL, sampler: Sampler,
+                    L: int, lag: int,
+                    weight_xi: np.matrix, f: Callable[[float], float],
+                    d_range: float, min_num_slices: int, portion_slices: float,
+                    io_data_list: List[IOData],
+                    weight_y: np.matrix,
+                    use_zero_l_initial_condition: bool = False,):
+        self.dynamic_error_model = dynamic_error_model
+        self.sampler = sampler
+
+        self.L = L
+        self.lag = lag
+
+        self.weight_xi = weight_xi
+        self.f = f
+        self.d_range = d_range
+        self.min_num_slices = min_num_slices
+        self.portion_slices = portion_slices
+        self.io_data_list = io_data_list
+
+        self.weight_y = weight_y
+
+        self.sampled_states: List[np.ndarray] = []
+        self.sampled_initial_inputs: List[List[np.matrix]] = []
+        self.sampled_future_inputs: List[List[np.matrix]] = []
+
+        self.use_zero_l_initial_condition = use_zero_l_initial_condition
+
+    def get_estimation_matrix(self, xi_t: np.matrix) -> np.matrix:
+        # get dataset matrix without progress along track center l by deleting corresponding rows
+        p = self.io_data_list[0]._output_data[0].shape[0]
+        m = self.io_data_list[0]._input_data[0].shape[0]
+        if self.use_zero_l_initial_condition:
+            xi_t[self.lag*m+p-1::p,:] = xi_t[self.lag*m+p-1::p,:] - xi_t[self.lag*m+p-1,:] # subtract progress along track center l from output
+        H_uy_noised: np.matrix = np.matrix(np.zeros(( p*self.lag+m*(self.L+self.lag),0 )))
+        H_future_noised: np.matrix = np.matrix(np.zeros(( p*self.L,0 )))
+        for io_data in self.io_data_list:
+            if io_data.length >= self.L+self.lag: # only use data with enough length
+                io_data.update_depth(self.L+self.lag)
+
+                H_output_noised_initial = io_data.H_output_noised_part((0, self.lag))
+
+                H_future_noised_single = io_data.H_output_noised_part((self.lag, self.lag+self.L))
+
+                H_uy_noised_single = np.vstack( (io_data.H_input, H_output_noised_initial,) )
+                H_uy_noised = np.hstack(( H_uy_noised, H_uy_noised_single ))
+                H_future_noised = np.hstack(( H_future_noised, H_future_noised_single ))
+
+        width_H = H_uy_noised.shape[1]
+        H_uy_noised: np.matrix = np.vstack( (H_uy_noised, np.ones((1, width_H))) )
+
+        # subtract progress along track center l from output if self.params.use_zero_l_initial is True
+        if self.use_zero_l_initial_condition:
+            H_future_noised[p-1::p,:] = H_future_noised[p-1::p,:] - \
+            H_uy_noised[m*(self.lag+self.L)+p-1,:]
+
+            H_uy_noised[m*(self.lag+self.L)+p-1::p,:] = H_uy_noised[m*(self.lag+self.L)+p-1::p,:] - \
+            H_uy_noised[m*(self.lag+self.L)+p-1,:]
+        
+        # calculate weights for each data segment
+        W_xi = self.weight_xi
+        H_xi = np.vstack(( H_uy_noised[:self.lag*m,:],H_uy_noised[-self.lag*p-1:-1,:] ))
+        delta_H_xi  = H_xi - xi_t
+        d_array = np.zeros((width_H,))
+        for i in range(width_H):
+            d_array[i] = (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
+        num = max(self.min_num_slices, int(width_H*self.portion_slices))
+        r_range = max(self.d_range, np.partition(d_array, num)[num])
+        d_inv_array = np.zeros((width_H,))
+        for i in range(width_H):
+            if d_array[i] < r_range:
+                d_inv_array[i] = self.f(d_array[i])
+            else:
+                d_inv_array[i] = 0
+        D_inv = np.diag(d_inv_array)
+
+        # calculate the estimation matrix
+        if self.use_zero_l_initial_condition:
+            H_uy_noised = np.delete(H_uy_noised, m*(self.lag+self.L)+p-1, axis=0)
+        D_inv_Huy_T = D_inv @ H_uy_noised.T
+        Phi = H_future_noised @ D_inv_Huy_T @ np.linalg.pinv(H_uy_noised @ D_inv_Huy_T)
+
+        return Phi
+
+    def get_d_array(self, xi_t: np.matrix) -> np.ndarray:
+        p = self.io_data_list[0]._output_data[0].shape[0]
+        m = self.io_data_list[0]._input_data[0].shape[0]
+        if self.use_zero_l_initial_condition:
+            xi_t[self.lag*m+p-1::p,:] = xi_t[self.lag*m+p-1::p,:] - xi_t[self.lag*m+p-1,:] # subtract progress along track center l from output
+        H_uy_noised: np.matrix = np.matrix(np.zeros(( p*self.lag+m*(self.L+self.lag),0 )))
+        H_future_noised: np.matrix = np.matrix(np.zeros(( p*self.L,0 )))
+        for io_data in self.io_data_list:
+            if io_data.length >= self.L+self.lag: # only use data with enough length
+                io_data.update_depth(self.L+self.lag)
+
+                H_output_noised_initial = io_data.H_output_noised_part((0, self.lag))
+
+                H_future_noised_single = io_data.H_output_noised_part((self.lag, self.lag+self.L))
+
+                H_uy_noised_single = np.vstack( (io_data.H_input, H_output_noised_initial,) )
+                H_uy_noised = np.hstack(( H_uy_noised, H_uy_noised_single ))
+                H_future_noised = np.hstack(( H_future_noised, H_future_noised_single ))
+
+        width_H = H_uy_noised.shape[1]
+        H_uy_noised: np.matrix = np.vstack( (H_uy_noised, np.ones((1, width_H))) )
+
+        # subtract progress along track center l from output if self.params.use_zero_l_initial is True
+        if self.use_zero_l_initial_condition:
+            H_future_noised[p-1::p,:] = H_future_noised[p-1::p,:] - \
+            H_uy_noised[m*(self.lag+self.L)+p-1,:]
+
+            H_uy_noised[m*(self.lag+self.L)+p-1::p,:] = H_uy_noised[m*(self.lag+self.L)+p-1::p,:] - \
+            H_uy_noised[m*(self.lag+self.L)+p-1,:]
+        
+        # calculate weights for each data segment
+        W_xi = self.weight_xi
+        H_xi = np.vstack(( H_uy_noised[:self.lag*m,:],H_uy_noised[-self.lag*p-1:-1,:] ))
+        delta_H_xi  = H_xi - xi_t
+        d_array = np.zeros((width_H,))
+        for i in range(width_H):
+            d_array[i] = (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
+        
+        return d_array
+
+    def predict(self, xi_t: np.matrix, u_f: List[np.matrix]) -> List[np.matrix]:
+        """
+        Predict future states of the system
+        Args:
+            xi: extended initial condition, of shape (lag * (m + p), 1)
+            u_future: list of future states to be applied
+        Return:
+            y_future: list of future states to be applied
+        """
+        m = self.io_data_list[0]._input_data[0].shape[0]
+        p = self.io_data_list[0]._output_data[0].shape[0]
+        Phi = self.get_estimation_matrix(xi_t)
+        u_future_matrix = np.vstack(u_f)
+        if self.use_zero_l_initial_condition:
+            xi_t[self.lag*m+p-1::p,:] = xi_t[self.lag*m+p-1::p,:] - xi_t[self.lag*m+p-1,:]
+            xi_t = np.delete(xi_t, m*self.lag+p-1, axis=0)
+        y_future_matrix = Phi[:,:m*self.lag] @ xi_t[:m*self.lag] + Phi[:,m*self.lag:m*(self.lag+self.L)] @ u_future_matrix + Phi[:,m*(self.lag+self.L):-1] @ xi_t[m*self.lag:] + Phi[:,-1]
+
+        return np.split(y_future_matrix, self.L)
+

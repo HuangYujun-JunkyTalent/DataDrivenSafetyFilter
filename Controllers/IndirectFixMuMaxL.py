@@ -183,7 +183,8 @@ class IndirectFixMuMaxLController:
         # self._objective = cp.quad_form(self._u[0:self._m*(self._steps)]-self._u_obj, R_n)  # error term 
         # obj = obj + self._epsilon*self._lam_alph * cp.norm(self._alpha, 2) # penalty term
         # obj = obj + self._lam_sig * cp.norm(self._sigma, 2) # penalty term
-        objective_fuc = - cp.sum(self._y[self._p-1::self._p]) # maximize final progress along track center l
+        # objective_fuc = - cp.sum(self._y[self._p-1::self._p]) # maximize progress along track center l
+        objective_fuc = - self._y[-1] # maximize final progress along track center l
         # objective_fuc =  - cp.sum(self._y[2:self.params.steps*self._p:self._p])
         # objective_fuc =  - self._y[self._p*self.params.steps-1]
         objective_fuc = objective_fuc + self.params.lam_sig * cp.sum_squares(self._sigma) # penalty term

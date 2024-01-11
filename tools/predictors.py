@@ -1,10 +1,12 @@
 from typing import List, Dict, Tuple, Callable, Optional
 import itertools
+from collections import Counter
 from itertools import islice
 import math
 import os
 import pickle
 from copy import deepcopy
+from enum import Enum
 
 import casadi as cas
 import numpy as np
@@ -18,6 +20,10 @@ from System.DynamicErrorModel import DynamicErrorModelVxy, DynamicErrorModelVxyL
 from tools.simualtion_results import Results, PlotStyle
 from tools.dataset_analyse import get_datasets_hankel_matrix, Sampler
 
+class DistanceMethod(Enum):
+    GivenDistance = 'GivenDistance'
+    SliceNumber = 'SliceNumber'
+    SlicePortion = 'SlicePortion'
 
 class DynamicModelPredictor:
     dynamic_error_model: DynamicErrorModelVxy
@@ -60,7 +66,7 @@ class DynamicModelPredictor:
         self.sampled_initial_inputs: List[List[np.matrix]] = []
         self.sampled_future_inputs: List[List[np.matrix]] = []
 
-    def get_estimation_matrix(self, xi_t: np.matrix) -> np.matrix:
+    def get_estimation_matrix(self, xi_t: np.matrix) -> Tuple[DistanceMethod, np.matrix]:
         """
         Get estimation matrix for given xi_t, which is the extended state of system
         xi: extended initial condition, of shape (lag * (m + p), 1)
@@ -80,8 +86,19 @@ class DynamicModelPredictor:
             d_array[i] = np.sqrt((delta_H_x_t[:,i].T @ self.weight_xi @ delta_H_x_t[:,i])[0,0])
 
         # find a proper diatance range
-        num_slices = max(self.min_num_slices, int(self.portion_slices*width_H))
-        d_range = max(self.d_range, np.partition(d_array, num_slices)[num_slices])
+        num_from_portion = int(width_H*self.portion_slices)
+        if self.min_num_slices > num_from_portion:
+            num_slices = self.min_num_slices
+            distance_method = DistanceMethod.SliceNumber
+        else:
+            num_slices = num_from_portion
+            distance_method = DistanceMethod.SlicePortion
+        distance_from_slice = np.partition(d_array, num_slices)[num_slices]
+        if self.d_range > distance_from_slice:
+            d_range = self.d_range
+            distance_method = DistanceMethod.GivenDistance
+        else:
+            d_range = distance_from_slice
         # print("d_range: ", d_range)
 
         d_inv_array = np.zeros((width_H,))
@@ -101,7 +118,7 @@ class DynamicModelPredictor:
         D_inv_Huy_T = D_inv @ H_u_y_1.T
         Phi = Yf @ D_inv_Huy_T @ np.linalg.pinv(H_u_y_1 @ D_inv_Huy_T)
 
-        return Phi
+        return distance_method, Phi
 
     def get_d_array(self, xi_t: np.matrix) -> np.ndarray:
         m = self.io_data_list[0]._input_data[0].shape[0]
@@ -143,7 +160,7 @@ class DynamicModelPredictor:
 
         ax.stairs(counts, bins)
 
-    def predict(self, xi_t: np.matrix, u_f: List[np.matrix]) -> List[np.matrix]:
+    def predict(self, xi_t: np.matrix, u_f: List[np.matrix]) -> Tuple[DistanceMethod, List[np.matrix]]:
         """
         Predict future states of the system
         Args:
@@ -154,12 +171,12 @@ class DynamicModelPredictor:
         """
         m = self.io_data_list[0]._input_data[0].shape[0]
         p = self.io_data_list[0]._output_data[0].shape[0]
-        Phi = self.get_estimation_matrix(xi_t)
+        distance_method, Phi = self.get_estimation_matrix(xi_t)
         u_future_matrix = np.vstack(u_f)
 
         y_future_matrix = Phi[:,:m*self.lag] @ xi_t[:m*self.lag] + Phi[:,m*self.lag:m*(self.lag+self.L)] @ u_future_matrix + Phi[:,m*(self.lag+self.L):-1] @ xi_t[m*self.lag:] + Phi[:,-1]
 
-        return np.split(y_future_matrix, self.L)
+        return (distance_method, np.split(y_future_matrix, self.L))
 
     def propogate_real_system(self, x_t: np.ndarray, u_future: List[np.matrix]) -> List[np.matrix]:
         self.dynamic_error_model.set_error_state(x_t)
@@ -170,7 +187,7 @@ class DynamicModelPredictor:
         
         return y_future
 
-    def prediction_error(self, x_t: np.ndarray, u_initial: List[np.matrix], u_future: List[np.matrix]) -> np.ndarray:
+    def prediction_error(self, x_t: np.ndarray, u_initial: List[np.matrix], u_future: List[np.matrix]) -> Tuple[DistanceMethod, np.ndarray]:
         """Start from a state x_t, first get extended initial using u_initial, then predict using u_future
         Calculate the prediction error
         return 1-d array, each element is the prediction error for one step"""
@@ -190,7 +207,7 @@ class DynamicModelPredictor:
             return np.array([np.nan]*self.L)
         xi_t = np.vstack(u_init_list + y_init_list)
 
-        y_pred_list = self.predict(xi_t, u_future)
+        distance_method, y_pred_list = self.predict(xi_t, u_future)
         y_real_list: List[np.matrix] = []
 
         for u in u_future:
@@ -212,7 +229,7 @@ class DynamicModelPredictor:
             y_diff = y_pred - y_real
             error_list[i] = (y_diff.T @ self.weight_y @ y_diff)[0,0]
         
-        return error_list
+        return distance_method, error_list
 
     def sample_state_and_input(self, n_states: int) -> Tuple[List[np.ndarray], List[List[np.matrix]], List[List[np.matrix]]]:
         """Use sampler to sample state and input, return list of states and inputs"""
@@ -234,14 +251,18 @@ class DynamicModelPredictor:
         self.sampled_future_inputs = u_future_list_list
         return state_list, u_intial_list_list, u_intial_list_list
 
-    def get_prediction_error(self) -> List[List[float]]:
+    def get_prediction_error(self) -> Tuple[Dict, List[List[float]]]:
         """Use sampler to sample state and input, then calculate prediction error
         return list of prediction error"""
         error_list: List[List[float]] = []
+        prediction_method_list: List[DistanceMethod] = []
         for state, u_initial_list, u_future_list in zip(self.sampled_states, self.sampled_initial_inputs, self.sampled_future_inputs):
-            error_for_state = self.prediction_error(state, u_initial_list, u_future_list)
+            error_model_state = deepcopy(state)
+            error_model_state[2] = error_model_state[2] + self.sampler.v_0
+            prediction_method, error_for_state = self.prediction_error(error_model_state, u_initial_list, u_future_list)
             error_list.append(error_for_state)
-        return error_list
+            prediction_method_list.append(prediction_method)
+        return Counter(prediction_method_list), error_list
     
 
 class DynamicModelPredictorWith_l(DynamicModelPredictor):
@@ -313,11 +334,23 @@ class DynamicModelPredictorWith_l(DynamicModelPredictor):
         d_array = np.zeros((width_H,))
         for i in range(width_H):
             d_array[i] = (delta_H_xi[:,i].T @ W_xi @ delta_H_xi[:,i])[0,0]
-        num = max(self.min_num_slices, int(width_H*self.portion_slices))
-        r_range = max(self.d_range, np.partition(d_array, num)[num])
+        num_from_portion = int(width_H*self.portion_slices)
+        if self.min_num_slices > num_from_portion:
+            num_slices = self.min_num_slices
+            distance_method = DistanceMethod.SliceNumber.value
+        else:
+            num_slices = num_from_portion
+            distance_method = DistanceMethod.SlicePortion.value
+        d_array_sorted = np.sort(d_array)
+        distance_from_slice = d_array_sorted[num_slices]
+        if self.d_range > distance_from_slice:
+            d_range = self.d_range
+            distance_method = DistanceMethod.GivenDistance.value
+        else:
+            d_range = distance_from_slice
         d_inv_array = np.zeros((width_H,))
         for i in range(width_H):
-            if d_array[i] < r_range:
+            if d_array[i] < d_range:
                 d_inv_array[i] = self.f(d_array[i])
             else:
                 d_inv_array[i] = 0
@@ -329,7 +362,7 @@ class DynamicModelPredictorWith_l(DynamicModelPredictor):
         D_inv_Huy_T = D_inv @ H_uy_noised.T
         Phi = H_future_noised @ D_inv_Huy_T @ np.linalg.pinv(H_uy_noised @ D_inv_Huy_T)
 
-        return Phi
+        return distance_method, Phi
 
     def get_d_array(self, xi_t: np.matrix) -> np.ndarray:
         p = self.io_data_list[0]._output_data[0].shape[0]
@@ -382,12 +415,12 @@ class DynamicModelPredictorWith_l(DynamicModelPredictor):
         """
         m = self.io_data_list[0]._input_data[0].shape[0]
         p = self.io_data_list[0]._output_data[0].shape[0]
-        Phi = self.get_estimation_matrix(xi_t)
+        prediction_method, Phi = self.get_estimation_matrix(xi_t)
         u_future_matrix = np.vstack(u_f)
         if self.use_zero_l_initial_condition:
             xi_t[self.lag*m+p-1::p,:] = xi_t[self.lag*m+p-1::p,:] - xi_t[self.lag*m+p-1,:]
             xi_t = np.delete(xi_t, m*self.lag+p-1, axis=0)
         y_future_matrix = Phi[:,:m*self.lag] @ xi_t[:m*self.lag] + Phi[:,m*self.lag:m*(self.lag+self.L)] @ u_future_matrix + Phi[:,m*(self.lag+self.L):-1] @ xi_t[m*self.lag:] + Phi[:,-1]
 
-        return np.split(y_future_matrix, self.L)
+        return prediction_method, np.split(y_future_matrix, self.L)
 

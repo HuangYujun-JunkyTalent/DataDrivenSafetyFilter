@@ -93,6 +93,7 @@ class Results:
         self._predicted_error_trajectory_slices: List[Tuple[float, List[np.ndarray]]] = []
         self._predicted_error_with_slack_slices: List[Tuple[float, List[np.ndarray]]] = []
         self._proposed_input_slices: List[Tuple[float, List[np.ndarray]]] = []
+        self.segment_change_index: List[int] = []
 
         self._calculation_time: List[float] = []
         self._opt_value_list: List[float] = []
@@ -163,6 +164,7 @@ class Results:
     def calculate_lap_time(self) -> float:
         indices_at_start_segment = np.nonzero(np.array(self._segment_index_list) == 0)[0]
         if len(indices_at_start_segment) == 0:
+            self.lap_time = self.simulation_time
             return np.nan
         for i, j in enumerate(indices_at_start_segment, indices_at_start_segment[0]):
             if i!=j:

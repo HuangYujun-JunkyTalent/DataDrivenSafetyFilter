@@ -272,15 +272,15 @@ class IndirectNominalFixMuWeightingAddDataFilter(DDSafetyFilter):
         Phi = self.get_estimation_matrix(xi_t)
 
         # dynamic constraint
-        self._constraints.append(Phi[:,self._lag*self._m:-self._p*self._lag-1] @ self._u == \
-                                self._y - self._sigma - \
-                                Phi[:,:self._lag*self._m]@self._xi_t[:self._lag*self._m] - \
-                                Phi[:,-self._p*self._lag-1:-1]@self._xi_t[-self._p*self._lag:] - \
-                                np.array((Phi[:,-1:]@np.ones((1,)))).squeeze())
+        self._constraints.append(Phi[:,self._lag*self._m:-self._p*self._lag-1] @ self._u + \
+                                 np.array(Phi[:,:self._lag*self._m]@xi_t[:self._lag*self._m]).flatten() + \
+                                 np.array(Phi[:,-self._p*self._lag-1:-1]@xi_t[-self._p*self._lag:]).flatten() + \
+                                 np.array((Phi[:,-1:]@np.ones((1,)))).squeeze() == \
+                                self._y - self._sigma)
 
         self._opt_prob = cp.Problem(objective=self._objective, constraints=self._constraints)
 
-        self._xi_t.value = np.array(xi_t.flat)
+        # self._xi_t.value = np.array(xi_t.flat)
         self._u_obj.value = np.array(u_obj.flat)
         if self._solver is None:
             self._opt_prob.solve(verbose=self._verbose, warm_start = self._warm_start, **self._solver_args)

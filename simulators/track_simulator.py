@@ -64,6 +64,11 @@ def round_track(gen: trackGenerator, t: float, track_start_point: np.ndarray) ->
     next = gen.left_turn(track_start_point, t, 2*np.pi)
     return gen
 
+def half_round_track(gen: trackGenerator, t: float, track_start_point: np.ndarray) -> trackGenerator:
+    next = gen.left_turn(track_start_point, t, np.pi)
+    next = gen.left_turn(next, t, np.pi)
+    return gen
+
 track_func = oval_track
 
 
@@ -169,6 +174,7 @@ class TrackSimulator:
     filter_params: List
     io_data_dict: Mapping[float, IODataWith_l]
     io_data_dict_stored: Mapping[float, IODataWith_l] = {} # stored data, not modified after created
+    i_seg_current: int = 0 # initial segment index
 
     def get_filter_params(self, cur: float, filter_type: SafetyFilterTypes, **kwargs):
         half_track_width = self.track_width/2
@@ -569,6 +575,9 @@ class TrackSimulator:
                                         simulation_input_types: List[SimulationInputRule],
                                         max_run_turns: int = 10,
                                         continue_to_end: bool = False,
+                                        stop_after_out_of_track_collection: bool = True,
+                                        t_collection: Optional[float] = None,
+                                        random_seed_collection: Optional[int] = None,
                                         ) -> List[List[Results]]:
         """Simulate with separate data-collection and filtering steps."""
         # setup needed options
@@ -577,6 +586,14 @@ class TrackSimulator:
         self.noise_list_dict = {}
         self.random_seed = random_seed
         self.noise_list_dict[random_seed] = self.get_noise()
+        if t_collection is not None:
+            t_sim_temp = self.t_sim
+            random_seed_temp = self.random_seed
+            self.t_sim = t_collection
+            self.random_seed = random_seed_collection
+            self.noise_list_dict[random_seed_collection] = self.get_noise()
+            self.t_sim = t_sim_temp
+            self.random_seed = random_seed_temp
         self.track_filter_type = track_filter_type
         self.filter_type_list = [filter_type] # reserve for using different filter types for segments
 
@@ -594,24 +611,34 @@ class TrackSimulator:
             self.save_dataset_after = False
             self.simulation_input_type = input_rule
             for i, application_param_dict in enumerate(application_params):
-                self.get_utilities_for_simualtion(random_seed, **application_param_dict)
+                self.get_utilities_for_simualtion(self.random_seed, **application_param_dict)
                 print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}, and application parameters {application_param_dict}")
-                result = self.simulate_once(random_seed, **application_param_dict)
+                result = self.simulate_once(self.random_seed, **application_param_dict)
                 application_results_list_list[i].append(result)
 
         print("\nCollecting data for the first time")
-        self.stop_after_out_of_track = True
+        if t_collection is not None:
+            t_sim_temp = self.t_sim
+            random_seed_temp = self.random_seed
+            self.t_sim = t_collection
+            self.random_seed = random_seed_collection
+        self.stop_after_out_of_track = stop_after_out_of_track_collection
         self.filter_type_list = [filter_type]
-        self.get_utilities_for_simualtion(random_seed, **filter_params)
+        self.get_utilities_for_simualtion(self.random_seed, **filter_params)
         print(f"\nSimulating with input rule {collection_input_type}")
         self.save_dataset_after = True
         self.simulation_input_type = collection_input_type
         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-        dataset_result = self.simulate_once(random_seed, **filter_params)
+        dataset_result = self.simulate_once(self.random_seed, **filter_params)
         collection_results_list.append(dataset_result)
+        if t_collection is not None:
+            self.t_sim = t_sim_temp
+            self.random_seed = random_seed_temp
+        self.save_datasets()
 
         all_good = False
-        num_runs = 1
+        num_runs = 0
+        # num_runs = 1
         while ((not all_good) or continue_to_end) and num_runs < max_run_turns:
             num_runs = num_runs + 1
             print("\nContinue to simulate")
@@ -623,10 +650,10 @@ class TrackSimulator:
                 self.simulation_input_type = input_rule
                 self.filter_type_list = [application_filter_type]
                 for i, application_param_dict in enumerate(application_params):
-                    self.get_utilities_for_simualtion(random_seed, **application_param_dict)
+                    self.get_utilities_for_simualtion(self.random_seed, **application_param_dict)
                     self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                     print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}, and application parameters {application_param_dict}")
-                    result = self.simulate_once(random_seed, **application_param_dict)
+                    result = self.simulate_once(self.random_seed, **application_param_dict)
                     application_results_list_list[i].append(result)
             all_good = True # whether constraints not violated for all simulation input rules
             for application_result_list in application_results_list_list:
@@ -636,16 +663,24 @@ class TrackSimulator:
                     if num_runs < max_run_turns:
                         # collect new datasets with proper input rule
                         print(f"\nCollecting dataset with input rule {collection_input_type}. \n")
-                        self.stop_after_out_of_track = True
+                        if t_collection is not None:
+                            t_sim_temp = self.t_sim
+                            random_seed_temp = self.random_seed
+                            self.t_sim = t_collection
+                            self.random_seed = random_seed_collection
+                        self.stop_after_out_of_track = stop_after_out_of_track_collection
                         self.out_of_track = False
                         self.save_dataset_after = True
                         self.simulation_input_type = collection_input_type
                         self.filter_type_list = [filter_type]
-                        self.get_utilities_for_simualtion(random_seed, **filter_params)
+                        self.get_utilities_for_simualtion(self.random_seed, **filter_params)
                         self.load_datasets(dataset_result.saved_dataset_name, delete_after_load=False)
                         print(f"And with first dataset list {[data.length for data in self.filter._safety_filters[0]._io_data_list]}")
-                        dataset_result = self.simulate_once(random_seed, **filter_params)
+                        dataset_result = self.simulate_once(self.random_seed, **filter_params)
                         collection_results_list.append(dataset_result)
+                        if t_collection is not None:
+                            self.t_sim = t_sim_temp
+                            self.random_seed = random_seed_temp
                     break
         
         print(f"\nConcluding simulation, with {[len(collection_results_list)]+[len(results_list) for results_list in application_results_list_list]} results collected.\n")
@@ -751,6 +786,7 @@ class TrackSimulator:
             'oval_track': oval_track,
             'round_track': round_track,
             'large_oval_track': larger_oval_track,
+            'half_round_track': half_round_track,
         }.get(self.track_fun_name, oval_track)
         self.track_generator = self.propogate_track_gen()
 
@@ -762,7 +798,7 @@ class TrackSimulator:
             self.io_data_dict_stored = self.get_io_data_dic()
             self.io_data_dict = deepcopy(self.io_data_dict_stored)
 
-        if random_seed not in self.noise_list_dict.keys():
+        if random_seed not in self.noise_list_dict.keys() or len(self.noise_list_dict[random_seed]) is None:
             print(f"Noise with random_seed={random_seed} not generated, generating it online")
             self.noise_list = self.get_noise()
         else:
@@ -907,10 +943,10 @@ class TrackSimulator:
                             results._proposed_input_slices.append(self.buffer_u_value[index_to_save])
                     except Exception as e:
                         print(f"Exception {e} raised during saving constraint violation history.")
-                    if self.save_dataset_after:
-                        file_name = self.save_datasets()
-                        results.saved_dataset_name = file_name
                     if self.stop_after_out_of_track:
+                        if self.save_dataset_after:
+                            file_name = self.save_datasets()
+                            results.saved_dataset_name = file_name
                         print(f"Stop simulation after constraint not satisfied!")
                         results.end_simulation()
 
@@ -947,6 +983,9 @@ class TrackSimulator:
                                   global_state, self.noise_list[i_steps+self.lag], 
                                   error_dynamics_state, np.zeros(error_dynamics_state.shape),
                                   i_seg,)
+                if self.i_seg_current != i_seg:
+                    self.i_seg_current = i_seg
+                    results.segment_change_index.append(i_steps)
 
         # calculate root mean square intervention and calcualtion time
         if self.save_dataset_after:
@@ -1099,17 +1138,48 @@ class TrackSimulator:
             elif self.simulation_input_type == SimulationInputRule.SINE_WITH_MEAN_RANDOM:
                 if t_j==0:
                 # if True:
+                    beta_0 = math.asin(self.l_r * self.cur)
+                    self._delta_0_for_cur = 1.7 * math.atan((self.l_r+self.l_f)/self.l_r*math.tan(beta_0))
+                    self.delta_amp = self.delta_sim + self._delta_0_for_cur
                     self.phi_delta = 0.5*math.pi*np.random.rand()
                     self.phi_tau = 0.5*math.pi*np.random.rand()
-                    self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi
-                    self.omega_tau = 2*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_delta_1 = 3*np.pi*np.random.rand() + 2*np.pi
+                    # self.omega_delta_2 = 6*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_delta_2 = 7.14*np.pi
+                    self.omega_tau_1 = 2*np.pi*np.random.rand() + 2*np.pi
+                    # self.omega_tau_2 = 6*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_tau_2 = 7.14*np.pi
                 u_obj_k = np.matrix([
-                    [0.4*throttle_sim + throttle_sim*math.sin(t_j*self.omega_tau + self.phi_tau)],
-                    [self.delta_sim*math.sin(t_j*self.omega_delta + self.phi_delta)]])
+                    [0.4*throttle_sim + \
+                        throttle_sim*math.sin(t_j*self.omega_tau_1 + self.phi_tau) + \
+                        throttle_sim*math.sin(t_j*self.omega_tau_2 + self.phi_tau)],
+                    [self._delta_0_for_cur + \
+                        0.5*self.delta_amp*math.sin(t_j*self.omega_delta_1 + self.phi_delta) + \
+                        0.5*self.delta_amp*math.sin(t_j*self.omega_delta_2 + self.phi_delta) + \
+                        0.6*self.delta_amp*np.random.rand()]])
+            elif self.simulation_input_type == SimulationInputRule.SINE_THROTTLE_RANDOM_STEER:
+                if t_j==0:
+                # if True:
+                    # self.phi_delta = 0.5*math.pi*np.random.rand()
+                    beta_0 = math.asin(self.l_r * self.cur)
+                    self._delta_0_for_cur = 0.85 * math.atan((self.l_r+self.l_f)/self.l_r*math.tan(beta_0))
+                    self.delta_amp = self.delta_sim + self._delta_0_for_cur
+                    self.phi_tau = 0.5*math.pi*np.random.rand()
+                    # self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_tau_1 = 2*np.pi*np.random.rand() + 2*np.pi
+                    # self.omega_tau_2 = 6*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_tau_2 = 7.14*np.pi
+                u_obj_k = np.matrix([
+                    [0.2*throttle_sim + \
+                        throttle_sim*math.sin(t_j*self.omega_tau_1 + self.phi_tau) + \
+                        throttle_sim*math.sin(t_j*self.omega_tau_2 + self.phi_tau)],
+                    [self._delta_0_for_cur + self.delta_amp*np.random.rand()]
+                    ])
             elif self.simulation_input_type == SimulationInputRule.RANDOM_WITH_MEAN:
                 u_obj_k = np.matrix([
-                    [0.4*throttle_sim + throttle_sim*np.random.rand()],
-                    [self.delta_sim*np.random.rand()]])
+                    [0.2*throttle_sim + throttle_sim*np.random.rand()],
+                    [self.delta_sim*np.random.rand()]
+                    ])
             u_obj = np.vstack( (u_obj, u_obj_k) )
         return u_obj
     

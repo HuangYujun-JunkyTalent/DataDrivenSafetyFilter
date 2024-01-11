@@ -138,17 +138,31 @@ class Sampler:
         while True:
             yield(np.random.uniform(x_min, x_max))
     
-    def state_iterator(self, use_smaller_v_y = True) -> Iterable[np.ndarray]:
+    def state_iterator(self, use_smaller_phi = True, use_smaller_v_y = True, use_smaller_phi_dot = True) -> Iterable[np.ndarray]:
         """Sample state from uniform distribution, also includes the always zero l (progress along the track)"""
         v_real_min = self.delta_v_x_min + self.v_0
         v_min = max(v_real_min, 0.5)
         v_delta_min = v_min - self.v_0
-        if use_smaller_v_y:
-            y_min = np.array([-self.track_width, self.mu_min, v_delta_min, 0.2*self.v_y_min, self.phi_rate_min, 0.0])
-            y_max = np.array([self.track_width, self.mu_max, self.delta_v_x_max, 0.2*self.v_y_max, self.phi_rate_max, 0.0])
+        if use_smaller_phi_dot:
+            phi_dot_min = self.phi_rate_min * 0.5
+            phi_dot_max = self.phi_rate_max * 0.5
         else:
-            y_min = np.array([-self.track_width, self.mu_min, v_delta_min, self.v_y_min, self.phi_rate_min, 0.0])
-            y_max = np.array([self.track_width, self.mu_max, self.delta_v_x_max, self.v_y_max, self.phi_rate_max, 0.0])
+            phi_dot_min = self.phi_rate_min
+            phi_dot_max = self.phi_rate_max
+        if use_smaller_v_y:
+            v_y_min = self.v_y_min * 0.2
+            v_y_max = self.v_y_max * 0.2
+        else:
+            v_y_min = self.v_y_min
+            v_y_max = self.v_y_max
+        if use_smaller_phi:
+            mu_min = self.mu_min * 0.4
+            mu_max = self.mu_max * 0.4
+        else:
+            mu_min = self.mu_min
+            mu_max = self.mu_max
+        y_min = np.array([-self.track_width, mu_min, v_delta_min, v_y_min, phi_dot_min, 0.0])
+        y_max = np.array([self.track_width, mu_max, self.delta_v_x_max, v_y_max, phi_dot_max, 0.0])
         while True:
             yield(np.random.uniform(y_min, y_max))
     

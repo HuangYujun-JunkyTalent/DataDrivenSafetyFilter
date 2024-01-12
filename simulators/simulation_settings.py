@@ -93,6 +93,8 @@ class SimulationInputRule(Enum):
     SINE_WITH_MEAN_RANDOM = 5
     RANDOM_WITH_MEAN = 6
     SINE_THROTTLE_RANDOM_STEER = 7
+    RANDOM_WITH_MEAN_LARGE_THROTTLE = 8
+    OLD_SINE_WITH_MEAN_RANDOM = 9
 
 
 class ModelType(Enum):

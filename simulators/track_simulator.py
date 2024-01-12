@@ -1162,17 +1162,18 @@ class TrackSimulator:
                 # if True:
                     # self.phi_delta = 0.5*math.pi*np.random.rand()
                     beta_0 = math.asin(self.l_r * self.cur)
-                    self._delta_0_for_cur = 0.85 * math.atan((self.l_r+self.l_f)/self.l_r*math.tan(beta_0))
+                    self._delta_0_for_cur = 0 * math.atan((self.l_r+self.l_f)/self.l_r*math.tan(beta_0))
                     self.delta_amp = self.delta_sim + self._delta_0_for_cur
                     self.phi_tau = 0.5*math.pi*np.random.rand()
                     # self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi
                     self.omega_tau_1 = 2*np.pi*np.random.rand() + 2*np.pi
                     # self.omega_tau_2 = 6*np.pi*np.random.rand() + 2*np.pi
-                    self.omega_tau_2 = 7.14*np.pi
+                    # self.omega_tau_2 = 7.14*np.pi
                 u_obj_k = np.matrix([
-                    [0.2*throttle_sim + \
-                        throttle_sim*math.sin(t_j*self.omega_tau_1 + self.phi_tau) + \
-                        throttle_sim*math.sin(t_j*self.omega_tau_2 + self.phi_tau)],
+                    [0.4*throttle_sim + \
+                        throttle_sim*math.sin(t_j*self.omega_tau_1 + self.phi_tau)],
+                        # throttle_sim*math.sin(t_j*self.omega_tau_1 + self.phi_tau) + \
+                        # throttle_sim*math.sin(t_j*self.omega_tau_2 + self.phi_tau)],
                     [self._delta_0_for_cur + self.delta_amp*np.random.rand()]
                     ])
             elif self.simulation_input_type == SimulationInputRule.RANDOM_WITH_MEAN:
@@ -1180,6 +1181,21 @@ class TrackSimulator:
                     [0.2*throttle_sim + throttle_sim*np.random.rand()],
                     [self.delta_sim*np.random.rand()]
                     ])
+            elif self.simulation_input_type == SimulationInputRule.RANDOM_WITH_MEAN_LARGE_THROTTLE:
+                u_obj_k = np.matrix([
+                    [0.4*throttle_sim + throttle_sim*np.random.rand()],
+                    [-0.2 * self.delta_sim + self.delta_sim*np.random.rand()]])
+            elif self.simulation_input_type == SimulationInputRule.OLD_SINE_WITH_MEAN_RANDOM:
+                if t_j==0:
+                # if True:
+                    self.phi_delta = 0.5*math.pi*np.random.rand()
+                    self.phi_tau = 0.5*math.pi*np.random.rand()
+                    self.omega_delta = 3*np.pi*np.random.rand() + 2*np.pi
+                    self.omega_tau = 2*np.pi*np.random.rand() + 2*np.pi
+                u_obj_k = np.matrix([
+                    [0.5*throttle_sim + throttle_sim*math.sin(t_j*self.omega_tau + self.phi_tau)],
+                    [-0.5*self.delta_sim + self.delta_sim*math.sin(t_j*self.omega_delta + self.phi_delta)]])
+
             u_obj = np.vstack( (u_obj, u_obj_k) )
         return u_obj
     
